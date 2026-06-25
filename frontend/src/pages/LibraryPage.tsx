@@ -1,6 +1,23 @@
 import { useEffect, useState } from 'react';
+import { BookOpen, Calendar, FileText, Play, Search, Sparkles, Trash2, UploadCloud, Wand2 } from 'lucide-react';
 import { api } from '../api/client';
 import type { PdfFile } from '../api/types';
+import { Button } from '@/components/ui/button';
+
+const coverThemes = ['coral', 'yellow', 'teal', 'slate', 'rose', 'amber'];
+
+function shortTitle(name: string) {
+  return name.replace(/\.pdf$/i, '').trim();
+}
+
+function initials(name: string) {
+  return shortTitle(name)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase())
+    .join('') || 'PDF';
+}
 
 export default function LibraryPage({ openConvert, openPreview }: { openConvert: (pdf: PdfFile) => void; openPreview: (pdf: PdfFile) => void }) {
   const [pdfs, setPdfs] = useState<PdfFile[]>([]);
@@ -32,35 +49,69 @@ export default function LibraryPage({ openConvert, openPreview }: { openConvert:
   }
 
   return (
-    <section className="page">
-      <div className="toolbar">
-        <h2>Library</h2>
-        <input placeholder="Search filename" value={keyword} onChange={(e) => setKeyword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load()} />
-        <select value={sort} onChange={(e) => setSort(e.target.value)}>
-          <option value="uploaded_at">Upload time</option>
-          <option value="author">Author</option>
-        </select>
-        <button onClick={load}>Search</button>
+    <section className="page library-page">
+      <div className="section-heading dashboard-heading">
+        <h2>My PDF books</h2>
+        <div className="library-controls">
+          <label className="inline-search">
+            <Search size={16} />
+            <input placeholder="Search filename" value={keyword} onChange={(e) => setKeyword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load()} />
+          </label>
+          <select value={sort} onChange={(e) => setSort(e.target.value)}>
+            <option value="uploaded_at">Upload time</option>
+            <option value="author">Author</option>
+          </select>
+          <Button size="sm" onClick={load}>Search</Button>
+        </div>
       </div>
-      <label className="dropzone" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file) upload(file).catch((err) => setError(err.message)); }}>
+
+      <label className="dropzone book-dropzone" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file) upload(file).catch((err) => setError(err.message)); }}>
         <input hidden type="file" accept="application/pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) upload(file).catch((err) => setError(err.message)); }} />
-        Drop a PDF here or click to upload. Max 200MB.
+        <span className="dropzone-icon"><UploadCloud size={20} /></span>
+        <span>
+          <strong>Drop a PDF here or click to upload</strong>
+          <small>Max 200MB · Convert books into bilingual audio plans</small>
+        </span>
       </label>
+
       {error && <p className="error">{error}</p>}
-      <div className="grid">
-        {pdfs.map((pdf) => (
-          <article className="card" key={pdf.id}>
-            <h3>{pdf.original_name}</h3>
-            <p>{pdf.page_count} pages · {(pdf.file_size / 1024 / 1024).toFixed(1)} MB</p>
-            <p>Author: {pdf.author || 'Unknown'}</p>
-            <p>Uploaded: {new Date(pdf.uploaded_at).toLocaleString()}</p>
-            <div className="actions">
-              <button onClick={() => openPreview(pdf)}>Preview</button>
-              <button onClick={() => openConvert(pdf)}>Convert</button>
-              <button className="danger" onClick={() => remove(pdf)}>Delete PDF</button>
+
+      <div className="book-grid">
+        {pdfs.map((pdf, index) => {
+          const title = shortTitle(pdf.original_name);
+          return (
+            <div className="library-book-card" key={pdf.id}>
+              <div className={`book-cover cover-${coverThemes[index % coverThemes.length]}`}>
+                <span>{initials(pdf.original_name)}</span>
+                <BookOpen size={26} strokeWidth={2.15} />
+              </div>
+              <div className="book-info">
+                <div className="book-title-row">
+                  <h3>{title}</h3>
+                  <Button variant="ghost" size="iconSm" aria-label={`Delete ${title}`} onClick={() => remove(pdf)}><Trash2 size={15} /></Button>
+                </div>
+                <p className="muted">{pdf.author || 'Unknown author'}</p>
+                <div className="book-meta-row">
+                  <span><FileText size={13} /> {pdf.page_count} pages</span>
+                  <span><Calendar size={13} /> {new Date(pdf.uploaded_at).toLocaleDateString()}</span>
+                  <span>{(pdf.file_size / 1024 / 1024).toFixed(1)} MB</span>
+                  <span className={`status-badge is-${pdf.status.toLowerCase()}`}>{pdf.status}</span>
+                </div>
+                <div className="actions card-actions">
+                  <Button variant="secondary" size="sm" onClick={() => openPreview(pdf)}><Play size={14} /> Preview</Button>
+                  <Button size="sm" onClick={() => openConvert(pdf)}><Wand2 size={14} /> Convert</Button>
+                </div>
+              </div>
             </div>
-          </article>
-        ))}
+          );
+        })}
+        {pdfs.length === 0 && (
+          <div className="empty-state">
+            <Sparkles size={26} />
+            <h3>No PDFs yet</h3>
+            <p>Upload a book to build your audio catalog.</p>
+          </div>
+        )}
       </div>
     </section>
   );
