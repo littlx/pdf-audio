@@ -1,0 +1,9 @@
+{
+  "name": "Bilingual PDF Audio Player",
+  "short_name": "PDF Audio",
+  "start_url": "/player",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "icons": []
+}

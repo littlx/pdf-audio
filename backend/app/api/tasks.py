@@ -1,0 +1,140 @@
+import json
+import time
+
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+
+from app.core.security import require_access_token
+from app.db.models import BilingualSegment, ConversionTask
+from app.db.session import get_db
+from app.services.artifact_service import get_artifact, set_artifact
+from app.workers.tasks import create_task, enqueue_task
+from app.api.schemas import TaskCreate
+
+router = APIRouter(prefix="/api/tasks", tags=["tasks"], dependencies=[Depends(require_access_token)])
+
+
+def serialize_task(task: ConversionTask) -> dict:
+    return {
+        "id": task.id,
+        "pdf_id": task.pdf_id,
+        "source_pdf_name": task.source_pdf_name,
+        "input_type": task.input_type,
+        "page_expression": task.page_expression,
+        "bilingual_format": task.bilingual_format,
+        "output_style": task.output_style,
+        "audio_mode": task.audio_mode,
+        "status": task.status,
+        "stage": task.stage,
+        "progress": task.progress,
+        "error_message": task.error_message,
+    }
+
+
+@router.post("")
+def create(payload: TaskCreate, db: Session = Depends(get_db)):
+    if payload.input_type == "page_range" and not payload.page_expression:
+        raise HTTPException(status_code=400, detail="page_expression is required")
+    if payload.input_type == "selected_text" and not payload.selected_text:
+        raise HTTPException(status_code=400, detail="selected_text is required")
+    task = create_task(db, payload.model_dump())
+    return serialize_task(task)
+
+
+@router.get("")
+def list_tasks(db: Session = Depends(get_db)):
+    tasks = db.query(ConversionTask).order_by(ConversionTask.created_at.desc()).limit(100).all()
+    return [serialize_task(task) for task in tasks]
+
+
+@router.get("/{task_id}")
+def get_task(task_id: str, db: Session = Depends(get_db)):
+    task = db.get(ConversionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    data = serialize_task(task)
+    data["segments"] = [
+        {"index": s.segment_index, "english": s.english, "chinese": s.chinese}
+        for s in db.query(BilingualSegment).filter(BilingualSegment.task_id == task.id).order_by(BilingualSegment.segment_index).all()
+    ]
+    data["extracted_text"] = get_artifact(db, task.id, "edited_text") or get_artifact(db, task.id, "extracted_text")
+    return data
+
+
+@router.patch("/{task_id}/text")
+def update_text(task_id: str, payload: dict, db: Session = Depends(get_db)):
+    task = db.get(ConversionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+    task.edited_text = text
+    db.query(BilingualSegment).filter(BilingualSegment.task_id == task_id).delete()
+    set_artifact(db, task.id, "edited_text", text)
+    db.commit()
+    return serialize_task(task)
+
+
+@router.post("/{task_id}/pause")
+def pause_task(task_id: str, db: Session = Depends(get_db)):
+    task = db.get(ConversionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.pause_requested = True
+    db.commit()
+    return serialize_task(task)
+
+
+@router.post("/{task_id}/cancel")
+def cancel_task(task_id: str, db: Session = Depends(get_db)):
+    task = db.get(ConversionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.cancel_requested = True
+    db.commit()
+    return serialize_task(task)
+
+
+@router.post("/{task_id}/resume")
+def resume_task(task_id: str, db: Session = Depends(get_db)):
+    task = db.get(ConversionTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.pause_requested = False
+    task.cancel_requested = False
+    task.status = "pending"
+    db.commit()
+    enqueue_task(task.id)
+    return serialize_task(task)
+
+
+@router.post("/{task_id}/retry")
+def retry_task(task_id: str, db: Session = Depends(get_db)):
+    return resume_task(task_id, db)
+
+
+@router.get("/{task_id}/events")
+def task_events(task_id: str):
+    def event_stream():
+        from app.db.session import SessionLocal
+
+        last = None
+        while True:
+            db = SessionLocal()
+            task = db.get(ConversionTask, task_id)
+            if not task:
+                db.close()
+                yield "event: error\ndata: Task not found\n\n"
+                break
+            data = json.dumps(serialize_task(task), ensure_ascii=False)
+            db.close()
+            if data != last:
+                last = data
+                yield f"data: {data}\n\n"
+            if json.loads(data)["status"] in {"completed", "failed", "paused", "canceled"}:
+                break
+            time.sleep(1)
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")

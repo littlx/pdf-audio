@@ -1,0 +1,114 @@
+import json
+import re
+from typing import Any
+
+import httpx
+from sqlalchemy.orm import Session
+
+from app.services.settings_service import get_settings
+
+STYLE_INSTRUCTIONS = {
+    "faithful": "Keep the output faithful to the original text.",
+    "plain_explanation": "Make the Chinese translation plain and easy to understand while preserving the original meaning.",
+    "child_friendly": "Use simpler language suitable for younger learners, without inventing new facts.",
+    "exam_english": "Keep wording useful for English exam learning.",
+    "business_english": "Use polished and professional business-style wording where appropriate.",
+}
+
+
+def build_prompt(text: str, bilingual_format: str, output_style: str) -> str:
+    unit = "one English sentence and one Chinese sentence" if bilingual_format == "sentence_pair" else "one English paragraph and one Chinese paragraph"
+    return f"""You are a professional bilingual English learning material editor.
+
+Convert the following English PDF text into English-Chinese parallel reading material.
+
+Requirements:
+1. The source text is English. Do not process it as Chinese source text.
+2. Output JSON only. Do not output Markdown or explanations.
+3. Each JSON item must include: index, english, chinese.
+4. Use {unit} per item.
+5. Preserve the original information. Do not invent facts.
+6. Preserve professional terminology.
+7. When helpful, include bilingual terminology in Chinese, such as Transformer（转换器）.
+8. Do not generate headings, summaries, introductions, or endings.
+9. Skip references, formulas, tables, footnotes, and irrelevant artifacts.
+10. Style: {STYLE_INSTRUCTIONS.get(output_style, STYLE_INSTRUCTIONS['faithful'])}
+
+JSON example:
+[
+  {{"index": 1, "english": "Artificial intelligence is changing how people learn.", "chinese": "人工智能正在改变人们的学习方式。"}}
+]
+
+PDF text:
+{text}
+"""
+
+
+def extract_json_array(content: str) -> list[dict[str, Any]]:
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        match = re.search(r"\[[\s\S]*\]", content)
+        if not match:
+            raise
+        data = json.loads(match.group(0))
+    if not isinstance(data, list):
+        raise ValueError("AI output must be a JSON array")
+    normalized = []
+    for idx, item in enumerate(data, start=1):
+        if not isinstance(item, dict):
+            continue
+        english = str(item.get("english", "")).strip()
+        chinese = str(item.get("chinese", "")).strip()
+        if english and chinese:
+            normalized.append({"index": int(item.get("index") or idx), "english": english, "chinese": chinese})
+    if not normalized:
+        raise ValueError("AI output contains no valid segments")
+    return normalized
+
+
+async def repair_json_with_ai(db: Session, bad_content: str) -> list[dict[str, Any]]:
+    cfg = get_settings(db)
+    api_key = cfg.get("ai_api_key")
+    base_url = str(cfg.get("ai_base_url") or "").rstrip("/")
+    model = cfg.get("ai_model") or "deepseek-v4-flash"
+    if not api_key:
+        raise ValueError("AI API key is not configured")
+    prompt = "Repair the following content into a valid JSON array. Each item must include index, english, chinese. Output JSON only.\n\n" + bad_content
+    async with httpx.AsyncClient(timeout=120) as client:
+        response = await client.post(
+            f"{base_url}/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0},
+        )
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+    return extract_json_array(content)
+
+
+async def generate_bilingual_segments(db: Session, text: str, bilingual_format: str, output_style: str) -> list[dict[str, Any]]:
+    cfg = get_settings(db)
+    api_key = cfg.get("ai_api_key")
+    base_url = str(cfg.get("ai_base_url") or "").rstrip("/")
+    model = cfg.get("ai_model") or "deepseek-v4-flash"
+    if not api_key:
+        raise ValueError("AI API key is not configured")
+    if not base_url:
+        raise ValueError("AI Base URL is not configured")
+
+    async with httpx.AsyncClient(timeout=180) as client:
+        response = await client.post(
+            f"{base_url}/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "model": model,
+                "messages": [{"role": "user", "content": build_prompt(text, bilingual_format, output_style)}],
+                "temperature": 0.2,
+            },
+        )
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+    try:
+        return extract_json_array(content)
+    except Exception:
+        return await repair_json_with_ai(db, content)
