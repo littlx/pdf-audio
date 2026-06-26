@@ -5,10 +5,11 @@ from pathlib import Path
 
 import fitz
 from fastapi import HTTPException, UploadFile
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.utils import ensure_dir, new_id
+from app.core.utils import ensure_dir, new_id, safe_path_under
 from app.db.models import PdfFile
 
 
@@ -55,55 +56,68 @@ async def save_uploaded_pdf(db: Session, file: UploadFile) -> PdfFile:
 
     tmp_dir = ensure_dir(Path(settings.storage_dir) / "tmp")
     tmp_path = tmp_dir / f"upload_{new_id('tmp')}.pdf"
+    target_dir: Path | None = None
     max_bytes = settings.max_pdf_size_mb * 1024 * 1024
     size = 0
-    with tmp_path.open("wb") as out:
-        while chunk := await file.read(1024 * 1024):
-            size += len(chunk)
-            if size > max_bytes:
-                tmp_path.unlink(missing_ok=True)
-                raise HTTPException(status_code=413, detail=f"PDF exceeds {settings.max_pdf_size_mb} MB")
-            out.write(chunk)
 
-    file_hash = hash_file(tmp_path)
-    existing = db.query(PdfFile).filter(PdfFile.file_hash == file_hash).first()
-    if existing:
+    try:
+        with tmp_path.open("wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > max_bytes:
+                    raise HTTPException(status_code=413, detail=f"PDF exceeds {settings.max_pdf_size_mb} MB")
+                out.write(chunk)
+
+        file_hash = hash_file(tmp_path)
+        existing = db.query(PdfFile).filter(PdfFile.file_hash == file_hash).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="This PDF has already been uploaded")
+
+        page_count, author, outline = inspect_pdf(tmp_path)
+        pdf_id = new_id("pdf")
+        target_dir = pdf_storage_dir(pdf_id)
+        target_path = target_dir / "original.pdf"
+        shutil.move(str(tmp_path), target_path)
+
+        pdf = PdfFile(
+            id=pdf_id,
+            original_name=file.filename,
+            file_hash=file_hash,
+            file_path=str(target_path),
+            file_size=size,
+            page_count=page_count,
+            author=author,
+            outline_json=outline,
+            status="ready",
+        )
+        db.add(pdf)
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="This PDF has already been uploaded") from exc
+        except Exception:
+            db.rollback()
+            raise
+        db.refresh(pdf)
+        return pdf
+    except Exception:
+        if target_dir:
+            shutil.rmtree(target_dir, ignore_errors=True)
+        raise
+    finally:
         tmp_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=409, detail="This PDF has already been uploaded")
-
-    page_count, author, outline = inspect_pdf(tmp_path)
-    pdf_id = new_id("pdf")
-    target_dir = pdf_storage_dir(pdf_id)
-    target_path = target_dir / "original.pdf"
-    shutil.move(str(tmp_path), target_path)
-
-    pdf = PdfFile(
-        id=pdf_id,
-        original_name=file.filename,
-        file_hash=file_hash,
-        file_path=str(target_path),
-        file_size=size,
-        page_count=page_count,
-        author=author,
-        outline_json=outline,
-        status="ready",
-    )
-    db.add(pdf)
-    db.commit()
-    db.refresh(pdf)
-    return pdf
 
 
 def delete_pdf_file(db: Session, pdf_id: str) -> None:
     pdf = db.get(PdfFile, pdf_id)
     if not pdf:
         raise HTTPException(status_code=404, detail="PDF not found")
-    path = Path(pdf.file_path)
-    parent = path.parent
-    path.unlink(missing_ok=True)
+    expected_dir = Path(settings.storage_dir) / "pdfs" / pdf_id
+    path = safe_path_under(pdf.file_path, expected_dir)
     try:
-        if parent.name == pdf_id:
-            shutil.rmtree(parent, ignore_errors=True)
+        path.unlink(missing_ok=True)
+        shutil.rmtree(expected_dir, ignore_errors=True)
     finally:
         db.delete(pdf)
         db.commit()

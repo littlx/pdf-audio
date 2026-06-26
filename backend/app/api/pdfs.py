@@ -1,13 +1,17 @@
 import json
 from pathlib import Path
+from typing import Literal
 
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.api.schemas import LastPageUpdate, OkOut, OutlineItem, PdfOut
+from app.core.config import settings
 from app.core.security import require_access_token
+from app.core.utils import safe_path_under
 from app.db.models import PdfFile
 from app.db.session import get_db
 from app.services.pdf_service import delete_pdf_file, save_uploaded_pdf
@@ -28,14 +32,14 @@ def serialize_pdf(pdf: PdfFile) -> dict:
     }
 
 
-@router.post("")
+@router.post("", response_model=PdfOut)
 async def upload_pdf(file: UploadFile, db: Session = Depends(get_db)):
     pdf = await save_uploaded_pdf(db, file)
     return serialize_pdf(pdf)
 
 
-@router.get("")
-def list_pdfs(keyword: str = "", sort: str = "uploaded_at", db: Session = Depends(get_db)):
+@router.get("", response_model=list[PdfOut])
+def list_pdfs(keyword: str = Query(default="", max_length=200), sort: Literal["uploaded_at", "author"] = "uploaded_at", db: Session = Depends(get_db)):
     query = db.query(PdfFile)
     if keyword:
         query = query.filter(PdfFile.original_name.ilike(f"%{keyword}%"))
@@ -46,7 +50,7 @@ def list_pdfs(keyword: str = "", sort: str = "uploaded_at", db: Session = Depend
     return [serialize_pdf(pdf) for pdf in query.all()]
 
 
-@router.get("/{pdf_id}")
+@router.get("/{pdf_id}", response_model=PdfOut)
 def get_pdf(pdf_id: str, db: Session = Depends(get_db)):
     pdf = db.get(PdfFile, pdf_id)
     if not pdf:
@@ -54,7 +58,7 @@ def get_pdf(pdf_id: str, db: Session = Depends(get_db)):
     return serialize_pdf(pdf)
 
 
-@router.delete("/{pdf_id}")
+@router.delete("/{pdf_id}", response_model=OkOut)
 def delete_pdf(pdf_id: str, db: Session = Depends(get_db)):
     delete_pdf_file(db, pdf_id)
     return {"ok": True}
@@ -63,14 +67,17 @@ def delete_pdf(pdf_id: str, db: Session = Depends(get_db)):
 @router.get("/{pdf_id}/file")
 def get_pdf_file(pdf_id: str, db: Session = Depends(get_db)):
     pdf = db.get(PdfFile, pdf_id)
-    if not pdf or not Path(pdf.file_path).exists():
+    if not pdf:
+        raise HTTPException(status_code=404, detail="PDF file not found")
+    path = safe_path_under(pdf.file_path, Path(settings.storage_dir) / "pdfs" / pdf_id)
+    if not path.exists():
         raise HTTPException(status_code=404, detail="PDF file not found")
     encoded_name = quote(pdf.original_name)
     headers = {"Content-Disposition": f"inline; filename*=UTF-8''{encoded_name}"}
-    return FileResponse(pdf.file_path, media_type="application/pdf", headers=headers)
+    return FileResponse(path, media_type="application/pdf", headers=headers)
 
 
-@router.get("/{pdf_id}/outline")
+@router.get("/{pdf_id}/outline", response_model=list[OutlineItem])
 def get_outline(pdf_id: str, db: Session = Depends(get_db)):
     pdf = db.get(PdfFile, pdf_id)
     if not pdf:
@@ -78,12 +85,11 @@ def get_outline(pdf_id: str, db: Session = Depends(get_db)):
     return json.loads(pdf.outline_json or "[]")
 
 
-@router.patch("/{pdf_id}/last-page")
-def update_last_page(pdf_id: str, payload: dict, db: Session = Depends(get_db)):
+@router.patch("/{pdf_id}/last-page", response_model=PdfOut)
+def update_last_page(pdf_id: str, payload: LastPageUpdate, db: Session = Depends(get_db)):
     pdf = db.get(PdfFile, pdf_id)
     if not pdf:
         raise HTTPException(status_code=404, detail="PDF not found")
-    page = int(payload.get("page", 1))
-    pdf.last_preview_page = max(1, min(page, pdf.page_count))
+    pdf.last_preview_page = max(1, min(payload.page, pdf.page_count))
     db.commit()
     return serialize_pdf(pdf)

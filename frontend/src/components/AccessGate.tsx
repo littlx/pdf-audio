@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, setToken } from '../api/client';
+import { api, clearOfflineCaches, clearToken, setToken } from '../api/client';
 
 export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
   const [token, setLocalToken] = useState('');
@@ -12,6 +12,8 @@ export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
       await api('/api/pdfs');
       onUnlock();
     } catch (err) {
+      clearToken();
+      clearOfflineCaches();
       setError(err instanceof Error ? err.message : 'Invalid access code');
     }
   }
@@ -21,8 +23,9 @@ export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
       <form className="card gate-card" onSubmit={submit}>
         <h1>Bilingual PDF Audio Player</h1>
         <p>Enter your access code to continue.</p>
-        <input value={token} onChange={(e) => setLocalToken(e.target.value)} placeholder="Access code" type="password" autoFocus />
-        {error && <p className="error">{error}</p>}
+        <label htmlFor="access-code">Access code</label>
+        <input id="access-code" value={token} onChange={(e) => setLocalToken(e.target.value)} placeholder="Access code" type="password" autoComplete="current-password" aria-invalid={Boolean(error)} autoFocus />
+        {error && <p className="error" role="alert">{error}</p>}
         <button type="submit">Unlock</button>
       </form>
     </main>

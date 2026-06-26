@@ -58,6 +58,22 @@ body {
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 a { color: inherit; text-decoration: none; }
+.hint a,
+.convert-main a,
+.pdf-frame a {
+  color: #356d5b;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.hint a:hover,
+.convert-main a:hover,
+.pdf-frame a:hover { color: #244c40; }
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(107, 143, 131, 0.24);
+}
 button:disabled { cursor: not-allowed; }
 input, textarea {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;

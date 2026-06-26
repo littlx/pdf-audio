@@ -22,6 +22,13 @@ def set_artifact(db: Session, task_id: str, key: str, value: str | dict | list) 
     db.commit()
 
 
+def delete_artifacts(db: Session, task_id: str, keys: list[str]) -> None:
+    if not keys:
+        return
+    db.query(TaskArtifact).filter(TaskArtifact.task_id == task_id, TaskArtifact.key.in_(keys)).delete(synchronize_session=False)
+    db.commit()
+
+
 def get_json_artifact(db: Session, task_id: str, key: str):
     value = get_artifact(db, task_id, key)
     if value is None:

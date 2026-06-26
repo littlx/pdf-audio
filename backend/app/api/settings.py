@@ -7,30 +7,32 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.api.schemas import OkOut, SettingsOut, SettingsUpdate, TtsPreviewRequest, VoiceOut
 from app.core.config import settings
 from app.core.security import require_access_token
-from app.core.utils import ensure_dir
+from app.core.utils import ensure_dir, safe_path_under
 from app.db.session import get_db
-from app.services.settings_service import get_settings, update_settings
+from app.services.settings_service import get_settings, serialize_settings, update_settings
 from app.services.tts_service import synthesize
 
 router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(require_access_token)])
 
 
-@router.get("")
+@router.get("", response_model=SettingsOut)
 def read_settings(db: Session = Depends(get_db)):
-    values = get_settings(db)
-    if values.get("ai_api_key"):
-        values["ai_api_key_masked"] = "********"
-    return values
+    return serialize_settings(get_settings(db))
 
 
-@router.put("")
-def write_settings(payload: dict, db: Session = Depends(get_db)):
-    return update_settings(db, payload)
+@router.put("", response_model=SettingsOut)
+def write_settings(payload: SettingsUpdate, db: Session = Depends(get_db)):
+    try:
+        values = update_settings(db, payload.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return serialize_settings(values)
 
 
-@router.get("/tts-voices")
+@router.get("/tts-voices", response_model=list[VoiceOut])
 async def tts_voices():
     voices = await edge_tts.list_voices()
     return [
@@ -40,16 +42,16 @@ async def tts_voices():
 
 
 @router.post("/tts-preview")
-async def tts_preview(payload: dict, db: Session = Depends(get_db)):
+async def tts_preview(payload: TtsPreviewRequest, db: Session = Depends(get_db)):
     cfg = get_settings(db)
-    lang = payload.get("lang", "english")
-    text = payload.get("text") or ("This is a preview of the English voice." if lang == "english" else "这是一段中文语音试听。")
-    voice = payload.get("voice") or (cfg["english_voice"] if lang == "english" else cfg["chinese_voice"])
+    lang = payload.lang
+    text = payload.text or ("This is a preview of the English voice." if lang == "english" else "这是一段中文语音试听。")
+    voice = payload.voice or (cfg["english_voice"] if lang == "english" else cfg["chinese_voice"])
     rate = cfg["english_rate"] if lang == "english" else cfg["chinese_rate"]
     volume = cfg["english_volume"] if lang == "english" else cfg["chinese_volume"]
     cache_key = hashlib.sha256(f"{lang}\n{voice}\n{rate}\n{volume}\n{text}".encode("utf-8")).hexdigest()[:24]
     out_dir = ensure_dir(Path(settings.storage_dir) / "cache" / "tts_preview")
-    out = out_dir / f"{lang}_{cache_key}.mp3"
+    out = safe_path_under(out_dir / f"{lang}_{cache_key}.mp3", out_dir)
     if out.exists() and out.stat().st_size > 0:
         return FileResponse(out, media_type="audio/mpeg", filename=out.name)
     try:
@@ -66,7 +68,7 @@ async def tts_preview(payload: dict, db: Session = Depends(get_db)):
     return FileResponse(out, media_type="audio/mpeg", filename=out.name)
 
 
-@router.post("/clear-cache")
+@router.post("/clear-cache", response_model=OkOut)
 def clear_cache():
     cache_dir = Path(settings.storage_dir) / "cache"
     tmp_dir = Path(settings.storage_dir) / "tmp"

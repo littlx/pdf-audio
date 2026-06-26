@@ -17,7 +17,7 @@ import PlayerPage from './pages/PlayerPage';
 import SettingsPage from './pages/SettingsPage';
 import PdfPreviewPage from './pages/PdfPreviewPage';
 import type { PdfFile } from './api/types';
-import { clearToken, getToken } from './api/client';
+import { clearOfflineCaches, clearToken, getToken } from './api/client';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -29,11 +29,12 @@ type NavItem = {
   icon: typeof LayoutDashboard;
 };
 
+const routes: Route[] = ['library', 'preview', 'convert', 'player', 'settings'];
 const navItems: NavItem[] = [
   { route: 'player', label: 'Overview', icon: LayoutDashboard },
   { route: 'library', label: 'Library', icon: Library },
   { route: 'convert', label: 'Convert', icon: FileAudio },
-  { route: 'settings', label: 'Setting', icon: Settings },
+  { route: 'settings', label: 'Settings', icon: Settings },
 ];
 
 const routeTitles: Record<Route, string> = {
@@ -41,18 +42,38 @@ const routeTitles: Record<Route, string> = {
   library: 'Library',
   preview: 'Preview',
   convert: 'Convert',
-  settings: 'Setting',
+  settings: 'Settings',
 };
+
+function parseRoute(pathname: string): Route {
+  const value = pathname.replace(/^\//, '').split('/')[0] as Route;
+  return routes.includes(value) ? value : 'player';
+}
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(Boolean(getToken()));
-  const [route, setRoute] = useState<Route>((location.pathname.replace('/', '') as Route) || 'player');
+  const [route, setRoute] = useState<Route>(() => parseRoute(location.pathname));
   const [selectedPdf, setSelectedPdf] = useState<PdfFile | undefined>();
   const [selectedText, setSelectedText] = useState<string | undefined>();
 
+  function navigate(nextRoute: Route, replace = false) {
+    const normalized = nextRoute === 'preview' && !selectedPdf ? 'library' : nextRoute;
+    setRoute(normalized);
+    const nextPath = `/${normalized}`;
+    if (location.pathname !== nextPath) {
+      replace ? history.replaceState(null, '', nextPath) : history.pushState(null, '', nextPath);
+    }
+  }
+
   useEffect(() => {
-    history.replaceState(null, '', `/${route}`);
-  }, [route]);
+    if (route === 'preview' && !selectedPdf) navigate('library', true);
+  }, [route, selectedPdf]);
+
+  useEffect(() => {
+    const onPopState = () => setRoute(parseRoute(location.pathname));
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   if (!unlocked) return <AccessGate onUnlock={() => setUnlocked(true)} />;
 
@@ -73,8 +94,9 @@ export default function App() {
                 type="button"
                 variant="ghost"
                 size="sm"
+                aria-current={selected ? 'page' : undefined}
                 className={cn('side-nav-item', selected && 'is-active')}
-                onClick={() => setRoute(item.route)}
+                onClick={() => item.route === 'convert' && !selectedPdf ? navigate('library') : navigate(item.route)}
               >
                 <Icon size={16} strokeWidth={2} />
                 <span>{item.label}</span>
@@ -84,15 +106,15 @@ export default function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <Button variant="ghost" size="sm" className="side-nav-item muted-nav">
+          <Button variant="ghost" size="sm" className="side-nav-item muted-nav" disabled>
             <CircleHelp size={16} strokeWidth={2} />
             <span>User Guide</span>
           </Button>
-          <Button variant="ghost" size="sm" className="side-nav-item muted-nav">
+          <Button variant="ghost" size="sm" className="side-nav-item muted-nav" disabled>
             <LifeBuoy size={16} strokeWidth={2} />
             <span>Support</span>
           </Button>
-          <Button variant="ghost" size="sm" className="side-nav-item muted-nav" onClick={() => { clearToken(); setUnlocked(false); }}>
+          <Button variant="ghost" size="sm" className="side-nav-item muted-nav" onClick={() => { clearToken(); clearOfflineCaches(); setUnlocked(false); }}>
             <Lock size={16} strokeWidth={2} />
             <span>Lock</span>
           </Button>
@@ -105,15 +127,15 @@ export default function App() {
             <div className="topbar-title">
               <span>{routeTitles[route]}</span>
             </div>
-            <Button className="admin-cta" size="sm" onClick={() => setRoute(selectedPdf ? 'convert' : 'library')}>
+            <Button className="admin-cta" size="sm" onClick={() => navigate(selectedPdf ? 'convert' : 'library')}>
               <Plus size={14} strokeWidth={2.4} />
               {selectedPdf ? 'New Audio' : 'Add PDF'}
             </Button>
           </header>
         )}
 
-        {route === 'library' && <LibraryPage openPreview={(pdf) => { setSelectedPdf(pdf); setRoute('preview'); }} openConvert={(pdf) => { setSelectedPdf(pdf); setSelectedText(undefined); setRoute('convert'); }} />}
-        {route === 'preview' && selectedPdf && <PdfPreviewPage pdf={selectedPdf} convertSelection={(text) => { setSelectedText(text); setRoute('convert'); }} />}
+        {route === 'library' && <LibraryPage openPreview={(pdf) => { setSelectedPdf(pdf); navigate('preview'); }} openConvert={(pdf) => { setSelectedPdf(pdf); setSelectedText(undefined); navigate('convert'); }} />}
+        {route === 'preview' && selectedPdf && <PdfPreviewPage pdf={selectedPdf} convertSelection={(text) => { setSelectedText(text); navigate('convert'); }} />}
         {route === 'convert' && <ConvertPage pdf={selectedPdf} selectedText={selectedText} />}
         {route === 'player' && <PlayerPage />}
         {route === 'settings' && <SettingsPage />}

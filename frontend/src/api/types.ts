@@ -48,3 +48,33 @@ export type SubtitleEntry = {
   end: number;
   text: string;
 };
+
+export type AppSettings = {
+  ai_base_url: string;
+  ai_model: string;
+  ai_api_key_configured?: boolean;
+  ai_api_key_masked?: string;
+  default_bilingual_format: 'sentence_pair' | 'paragraph_pair';
+  default_output_style: 'faithful' | 'plain_explanation' | 'child_friendly' | 'exam_english' | 'business_english';
+  english_voice: string;
+  chinese_voice: string;
+  english_rate: string;
+  chinese_rate: string;
+  english_volume: string;
+  chinese_volume: string;
+  pause_between_languages_ms: number;
+  pause_between_segments_ms: number;
+  subtitle_font_size: 'small' | 'medium' | 'large';
+  subtitle_color: string;
+  dark_mode: boolean;
+};
+
+export type SettingsUpdatePayload = Partial<Omit<AppSettings, 'ai_api_key_configured' | 'ai_api_key_masked'>> & {
+  ai_api_key?: string;
+};
+
+export type TtsVoice = {
+  name: string;
+  locale?: string;
+  gender?: string;
+};

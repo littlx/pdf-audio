@@ -5,11 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.security import require_access_token
-from app.core.utils import new_id
+from app.core.utils import new_id, safe_path_under
 from app.db.models import AudioFile, PlaybackRecord
 from app.db.session import get_db
-from app.api.schemas import PlaybackIn
+from app.api.schemas import AudioOut, OkOut, PlaybackIn, PlaybackOut
 
 router = APIRouter(prefix="/api/audios", tags=["audios"], dependencies=[Depends(require_access_token)])
 
@@ -31,13 +32,17 @@ def serialize_audio(audio: AudioFile) -> dict:
     }
 
 
-@router.get("")
+def audio_storage_dir(audio_id: str) -> Path:
+    return Path(settings.storage_dir) / "audios" / audio_id
+
+
+@router.get("", response_model=list[AudioOut])
 def list_audios(db: Session = Depends(get_db)):
     audios = db.query(AudioFile).order_by(AudioFile.created_at.desc()).all()
     return [serialize_audio(audio) for audio in audios]
 
 
-@router.get("/{audio_id}")
+@router.get("/{audio_id}", response_model=AudioOut)
 def get_audio(audio_id: str, db: Session = Depends(get_db)):
     audio = db.get(AudioFile, audio_id)
     if not audio:
@@ -45,23 +50,25 @@ def get_audio(audio_id: str, db: Session = Depends(get_db)):
     return serialize_audio(audio)
 
 
-@router.delete("/{audio_id}")
+@router.delete("/{audio_id}", response_model=OkOut)
 def delete_audio(audio_id: str, db: Session = Depends(get_db)):
     audio = db.get(AudioFile, audio_id)
     if not audio:
         raise HTTPException(status_code=404, detail="Audio not found")
-    audio_path = Path(audio.audio_path)
-    parent = audio_path.parent
-    shutil.rmtree(parent, ignore_errors=True)
+    safe_path_under(audio.audio_path, audio_storage_dir(audio_id))
+    shutil.rmtree(audio_storage_dir(audio_id), ignore_errors=True)
     db.delete(audio)
     db.commit()
     return {"ok": True}
 
 
 def _file_response(audio: AudioFile, path: str | None, media_type: str, filename: str):
-    if not path or not Path(path).exists():
+    if not path:
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(path, media_type=media_type, filename=filename)
+    safe_path = safe_path_under(path, audio_storage_dir(audio.id))
+    if not safe_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(safe_path, media_type=media_type, filename=filename)
 
 
 @router.get("/{audio_id}/file")
@@ -96,7 +103,7 @@ def subtitles_srt(audio_id: str, db: Session = Depends(get_db)):
     return _file_response(audio, audio.subtitle_srt_path, "text/plain", "subtitles.srt")
 
 
-@router.get("/{audio_id}/playback")
+@router.get("/{audio_id}/playback", response_model=PlaybackOut)
 def get_playback(audio_id: str, db: Session = Depends(get_db)):
     row = db.query(PlaybackRecord).filter(PlaybackRecord.audio_id == audio_id).first()
     if not row:
@@ -104,7 +111,7 @@ def get_playback(audio_id: str, db: Session = Depends(get_db)):
     return {"current_time": row.current_time, "playback_rate": row.playback_rate, "loop_current_segment": row.loop_current_segment}
 
 
-@router.put("/{audio_id}/playback")
+@router.put("/{audio_id}/playback", response_model=OkOut)
 def save_playback(audio_id: str, payload: PlaybackIn, db: Session = Depends(get_db)):
     if not db.get(AudioFile, audio_id):
         raise HTTPException(status_code=404, detail="Audio not found")

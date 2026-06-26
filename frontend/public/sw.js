@@ -8,7 +8,18 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches.keys().then((keys) => Promise.all(keys
+      .filter((key) => ![STATIC_CACHE, OFFLINE_CACHE].includes(key))
+      .map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'CLEAR_OFFLINE_CACHE') {
+    event.waitUntil(caches.delete(event.data.cacheName || OFFLINE_CACHE));
+  }
 });
 
 self.addEventListener('fetch', (event) => {
@@ -18,9 +29,7 @@ self.addEventListener('fetch', (event) => {
       caches.open(OFFLINE_CACHE).then(async (cache) => {
         const cached = await cache.match(event.request);
         if (cached) return cached;
-        const response = await fetch(event.request);
-        if (response.ok) cache.put(event.request, response.clone());
-        return response;
+        return fetch(event.request);
       })
     );
     return;

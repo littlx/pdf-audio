@@ -240,7 +240,19 @@ export default function PlayerPage() {
           </div>
 
           <div className="subtitle-list">
-            {groups.map((group) => <div key={group.index} className={active?.segment_index === group.index ? 'segment active-segment' : 'segment'} onClick={() => seek(group.english || group.chinese)}>
+            {groups.map((group) => <div
+              key={group.index}
+              className={active?.segment_index === group.index ? 'segment active-segment' : 'segment'}
+              role="button"
+              tabIndex={0}
+              onClick={() => seek(group.english || group.chinese)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  seek(group.english || group.chinese);
+                }
+              }}
+            >
               <span className="segment-index">{String(group.index + 1).padStart(2, '0')}</span>
               <div>
                 {!hideEn && <p>{group.english?.text}</p>}

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import shutil
 import threading
 from pathlib import Path
@@ -18,6 +19,8 @@ from app.services.settings_service import get_settings
 from app.services.text_extraction import extract_text_from_pdf, parse_page_expression
 from app.services.tts_service import audio_dir, concat_mp3, ffprobe_duration, normalize_audio, silence_mp3, synthesize, task_dir, write_subtitles
 
+logger = logging.getLogger(__name__)
+
 
 def queue() -> Queue:
     redis = Redis.from_url(settings.redis_url)
@@ -26,8 +29,16 @@ def queue() -> Queue:
 
 def enqueue_task(task_id: str) -> None:
     try:
-        queue().enqueue("app.workers.tasks.run_conversion_task", task_id, job_timeout="2h")
-    except Exception:
+        queue().enqueue("app.workers.tasks.run_conversion_task", task_id, job_id=f"task:{task_id}", job_timeout="2h")
+        logger.info("Enqueued conversion task %s", task_id)
+    except Exception as exc:
+        if "already exists" in str(exc).lower():
+            logger.info("Conversion task %s is already enqueued", task_id)
+            return
+        if not settings.worker_fallback_to_thread:
+            logger.exception("Failed to enqueue conversion task %s", task_id)
+            raise
+        logger.exception("Failed to enqueue conversion task %s; running in-process fallback thread", task_id)
         thread = threading.Thread(target=run_conversion_task, args=(task_id,), daemon=True)
         thread.start()
 
@@ -43,7 +54,7 @@ def update_task(db: Session, task: ConversionTask, status: str, stage: str, prog
 
 def check_control(db: Session, task: ConversionTask) -> None:
     db.refresh(task)
-    if task.cancel_requested:
+    if task.cancel_requested or task.status == "canceling":
         update_task(db, task, "canceled", task.stage, task.progress)
         raise RuntimeError("Task canceled")
     if task.pause_requested:
@@ -227,8 +238,12 @@ def run_conversion_task(task_id: str) -> None:
         task = db.get(ConversionTask, task_id)
         if not task:
             return
+        if task.status == "running":
+            return
+        if task.cancel_requested or task.status == "canceled":
+            update_task(db, task, "canceled", "canceled", task.progress or 0)
+            return
         task.pause_requested = False
-        task.cancel_requested = False
         update_task(db, task, "running", task.stage or "pending", task.progress or 0)
         check_control(db, task)
         text = _ensure_text(db, task)

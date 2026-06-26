@@ -1,7 +1,8 @@
 import json
+from urllib.parse import urlparse
+
 from sqlalchemy.orm import Session
 
-from app.core.utils import new_id
 from app.db.models import AppSetting
 
 DEFAULT_SETTINGS = {
@@ -24,6 +25,15 @@ DEFAULT_SETTINGS = {
 }
 
 
+def validate_ai_base_url(value: str) -> str:
+    parsed = urlparse(str(value or "").strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("AI Base URL must be an http(s) URL with a host")
+    if parsed.query or parsed.fragment:
+        raise ValueError("AI Base URL must not include query parameters or fragments")
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+
+
 def get_settings(db: Session) -> dict:
     rows = db.query(AppSetting).all()
     values = DEFAULT_SETTINGS.copy()
@@ -35,10 +45,29 @@ def get_settings(db: Session) -> dict:
     return values
 
 
+def serialize_settings(values: dict) -> dict:
+    data = values.copy()
+    api_key = str(data.pop("ai_api_key", "") or "")
+    data["ai_api_key_configured"] = bool(api_key)
+    if api_key:
+        data["ai_api_key_masked"] = "********"
+    return data
+
+
 def update_settings(db: Session, payload: dict) -> dict:
+    updates = {}
     for key, value in payload.items():
         if key not in DEFAULT_SETTINGS:
             continue
+        if value is None:
+            continue
+        if key == "ai_api_key" and not str(value or "").strip():
+            continue
+        if key == "ai_base_url":
+            value = validate_ai_base_url(str(value))
+        updates[key] = value
+
+    for key, value in updates.items():
         row = db.get(AppSetting, key)
         encoded = json.dumps(value, ensure_ascii=False)
         if not row:

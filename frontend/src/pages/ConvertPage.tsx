@@ -37,10 +37,14 @@ export default function ConvertPage({ pdf, selectedText }: { pdf?: PdfFile; sele
 
   async function createTask() {
     setError('');
-    const useSelectedText = Boolean(liveSelection);
+    const useSelectedText = Boolean(liveSelection.trim());
+    if (!useSelectedText && !pdf) {
+      setError('Choose a PDF before starting a page range conversion.');
+      return;
+    }
     const payload = useSelectedText
       ? { pdf_id: pdf?.id, input_type: 'selected_text', selected_text: liveSelection, bilingual_format: format, output_style: style, audio_mode: audioMode }
-      : { pdf_id: pdf?.id, input_type: 'page_range', page_expression: pageExpression, bilingual_format: format, output_style: style, audio_mode: audioMode };
+      : { pdf_id: pdf!.id, input_type: 'page_range', page_expression: pageExpression, bilingual_format: format, output_style: style, audio_mode: audioMode };
     try {
       const created = await api<Task>('/api/tasks', { method: 'POST', body: JSON.stringify(payload) });
       setTask(created);
@@ -83,6 +87,17 @@ export default function ConvertPage({ pdf, selectedText }: { pdf?: PdfFile; sele
     await refresh();
   }
 
+  if (!pdf && !liveSelection) {
+    return (
+      <section className="page">
+        <div className="card empty-state">
+          <h2>Select a PDF first</h2>
+          <p>Open the Library and choose a PDF before starting a page range conversion.</p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="page">
       <div className="convert-layout" onMouseUp={captureSelection}>
@@ -97,21 +112,21 @@ export default function ConvertPage({ pdf, selectedText }: { pdf?: PdfFile; sele
         <main className="convert-main">
           <h2>Convert PDF to Audio</h2>
           {pdf && <p className="source-meta">Source: <span>{pdf.original_name}</span></p>}
-          {pdf && <p className="hint selection-hint">Select text in the PDF preview if your browser allows iframe PDF text selection. You can also <a href={`/api/pdfs/${pdf.id}/file`} target="_blank">open in a new tab</a>.</p>}
+          {pdf && <p className="hint selection-hint">Select text in the PDF preview if your browser allows iframe PDF text selection. You can also <a href={`/api/pdfs/${pdf.id}/file`} target="_blank" rel="noreferrer noopener">open in a new tab</a>, copy text, and paste it into the selected text box below.</p>}
           {liveSelection && <p className="hint active-text-hint">Using selected PDF text. Clear the selected text to use page range instead.</p>}
           
           <div className="divider-dashed" />
           
           <div className="card form-grid">
             {!liveSelection && <label>Pages<input value={pageExpression} onChange={(e) => setPageExpression(e.target.value)} placeholder="1-3, 5, 8-10" /></label>}
-            {liveSelection && <label>Selected text<textarea value={liveSelection} onChange={(e) => setLiveSelection(e.target.value)} rows={5} /><button type="button" className="btn-text-action" onClick={() => setLiveSelection('')}>Clear selection & use pages</button></label>}
+            <label>Selected text<textarea value={liveSelection} onChange={(e) => setLiveSelection(e.target.value)} rows={5} placeholder="Paste copied PDF text here to convert selected text instead of pages." /><button type="button" className="btn-text-action" onClick={() => setLiveSelection('')}>Clear selection & use pages</button></label>
             <label>Format<select value={format} onChange={(e) => setFormat(e.target.value)}><option value="sentence_pair">Sentence pair</option><option value="paragraph_pair">Paragraph pair</option></select></label>
             <label>Style<select value={style} onChange={(e) => setStyle(e.target.value)}><option value="faithful">Faithful</option><option value="plain_explanation">Plain explanation</option><option value="child_friendly">Child-friendly</option><option value="exam_english">Exam English</option><option value="business_english">Business English</option></select></label>
             <label>Audio<select value={audioMode} onChange={(e) => setAudioMode(e.target.value)}><option value="bilingual">Bilingual</option><option value="english">English only</option><option value="chinese">Chinese only</option></select></label>
-            <button onClick={createTask}>Start conversion</button>
+            <button onClick={createTask} disabled={!liveSelection && !pdf}>Start conversion</button>
           </div>
           
-          {error && <p className="error">{error}</p>}
+          {error && <p className="error" role="alert">{error}</p>}
           
           {task && (
             <>
@@ -123,8 +138,8 @@ export default function ConvertPage({ pdf, selectedText }: { pdf?: PdfFile; sele
                   <span className="task-stage">{task.stage}</span>
                   <span className="task-progress-percent">{task.progress}%</span>
                 </div>
-                <progress value={task.progress} max={100} />
-                {task.error_message && <p className="error">{task.error_message}</p>}
+                <progress aria-label="Conversion progress" value={task.progress} max={100} />
+                {task.error_message && <p className="error" role="alert">{task.error_message}</p>}
                 
                 <div className="actions">
                   <button onClick={() => control('pause')}>Pause</button>
@@ -148,12 +163,7 @@ export default function ConvertPage({ pdf, selectedText }: { pdf?: PdfFile; sele
                     <div className="divider-dashed" />
                     <h4>Bilingual text</h4>
                     <div className="segment-list">
-                      {task.segments.map((s) => (
-                        <div className="segment" key={s.index}>
-                          <p>{s.english}</p>
-                          <p>{s.chinese}</p>
-                        </div>
-                      ))}
+                      {task.segments.map((segment) => <div key={segment.index} className="segment"><strong>{segment.index}</strong><p>{segment.english}</p><p>{segment.chinese}</p></div>)}
                     </div>
                   </>
                 )}

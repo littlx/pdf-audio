@@ -12,12 +12,14 @@ services:
       DATABASE_URL: sqlite:////app/storage/app.db
       STORAGE_DIR: /app/storage
       REDIS_URL: redis://redis:6379/0
+      WORKER_FALLBACK_TO_THREAD: "false"
     ports:
       - "8000:8000"
     volumes:
       - ./storage:/app/storage
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   worker:
@@ -33,16 +35,23 @@ services:
       DATABASE_URL: sqlite:////app/storage/app.db
       STORAGE_DIR: /app/storage
       REDIS_URL: redis://redis:6379/0
+      WORKER_FALLBACK_TO_THREAD: "false"
     command: python -m app.workers.worker
     volumes:
       - ./storage:/app/storage
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     volumes:
       - redis-data:/data
 
