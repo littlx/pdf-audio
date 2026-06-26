@@ -1,51 +1,59 @@
 import { useEffect, useRef, useState } from 'react';
-import { Download, FileDown, Headphones, Repeat2, SkipBack, SkipForward, Wifi, ListMusic, ChevronUp, MoreVertical, Play, Pause } from 'lucide-react';
+import { Download, FileDown, Headphones, Repeat2, SkipBack, SkipForward, Wifi, ListMusic, MoreVertical, Play, Pause } from 'lucide-react';
 import { api, getToken } from '../api/client';
-import type { AudioFile, SubtitleEntry } from '../api/types';
+import type { SubtitleEntry } from '../api/types';
 import { Button } from './ui/button';
+import { useT } from '../context/I18nContext';
+import { usePlayer } from '../context/PlayerContext';
+import { useToast } from '../context/ToastContext';
+import { formatTime } from '../lib/utils';
 
-type GlobalPlayerProps = {
-  activeAudio: AudioFile | null;
-  onOpenSubtitles: () => void;
-  isSubtitlesOpen: boolean;
-  onSubtitlesLoaded: (subs: SubtitleEntry[]) => void;
-  activeSub: SubtitleEntry | null;
-  setActiveSub: (sub: SubtitleEntry | null) => void;
-  seekTime: number | null;
-  onSeekReset: () => void;
-  hideEn: boolean;
-  hideZh: boolean;
-  dictation: boolean;
-  setHideEn: (val: boolean) => void;
-  setHideZh: (val: boolean) => void;
-  setDictation: (val: boolean) => void;
-  t: (key: any) => string;
-};
+function binarySearchSubtitles(subs: SubtitleEntry[], time: number): number {
+  let low = 0;
+  let high = subs.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const item = subs[mid];
+    if (time >= item.start && time <= item.end) {
+      return mid;
+    } else if (time < item.start) {
+      high = mid - 1;
+    } else {
+      low = mid + 1;
+    }
+  }
+  return -1;
+}
 
-export default function GlobalPlayer({
-  activeAudio,
-  onOpenSubtitles,
-  isSubtitlesOpen,
-  onSubtitlesLoaded,
-  activeSub,
-  setActiveSub,
-  seekTime,
-  onSeekReset,
-  hideEn,
-  hideZh,
-  dictation,
-  setHideEn,
-  setHideZh,
-  setDictation,
-  t,
-}: GlobalPlayerProps) {
-  const [subs, setSubs] = useState<SubtitleEntry[]>([]);
+
+
+export default function GlobalPlayer() {
+  const { t } = useT();
+  const { toast } = useToast();
+  const {
+    activeAudio,
+    isPlaying,
+    setIsPlaying,
+    isSubtitlesOpen,
+    setIsSubtitlesOpen,
+    subs,
+    setSubs,
+    activeSub,
+    setActiveSub,
+    seekTime,
+    setSeekTime,
+    hideEn,
+    setHideEn,
+    hideZh,
+    setHideZh,
+    dictation,
+    setDictation,
+  } = usePlayer();
+
   const [loop, setLoop] = useState(false);
-  const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number | null>(null);
   const [displayedText, setDisplayedText] = useState('');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [currentRate, setCurrentRate] = useState(1);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -82,33 +90,30 @@ export default function GlobalPlayer({
     if (seekTime !== null && audioRef.current) {
       audioRef.current.currentTime = seekTime;
       audioRef.current.play().catch(() => undefined);
-      onSeekReset();
+      setSeekTime(null);
     }
   }, [seekTime]);
 
-  // Listen for toggle play commands from Media Library
+  // Listen for context-triggered toggle play commands
   useEffect(() => {
     const handleToggle = () => {
       togglePlay();
     };
-    window.addEventListener('player-toggle-play', handleToggle);
-    return () => window.removeEventListener('player-toggle-play', handleToggle);
-  }, [isPlaying]);
+    window.addEventListener('player-toggle-play-trigger', handleToggle);
+    return () => window.removeEventListener('player-toggle-play-trigger', handleToggle);
+  }, []);
 
   // Load subtitles when audio file changes
   useEffect(() => {
     if (!activeAudio) {
       setSubs([]);
-      onSubtitlesLoaded([]);
       setActiveSub(null);
-      setCurrentSegmentIndex(null);
       setDisplayedText('');
       setIsPlaying(false);
       setCurrentTime(0);
       setDuration(0);
       return;
     }
-    setCurrentSegmentIndex(null);
     setDisplayedText('');
     setIsPlaying(false);
     setCurrentTime(0);
@@ -118,11 +123,9 @@ export default function GlobalPlayer({
     api<SubtitleEntry[]>(activeAudio.subtitle_json_url)
       .then((data) => {
         setSubs(data);
-        onSubtitlesLoaded(data);
       })
       .catch(() => {
         setSubs([]);
-        onSubtitlesLoaded([]);
       });
 
     // Fetch playback state
@@ -150,33 +153,48 @@ export default function GlobalPlayer({
     }, 150);
   }, [activeAudio?.id]);
 
+  // Periodic state save (every 10s)
+  useEffect(() => {
+    if (!isPlaying || !activeAudio) return;
+    const timer = setInterval(() => {
+      saveProgress();
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [isPlaying, activeAudio?.id, loop]);
+
+  // Page hide / visibility change fallback
+  useEffect(() => {
+    const handleUnload = () => {
+      saveProgress();
+    };
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        saveProgress();
+      }
+    });
+    window.addEventListener('pagehide', handleUnload);
+    return () => {
+      window.removeEventListener('pagehide', handleUnload);
+    };
+  }, [activeAudio?.id, loop]);
+
   function onTime() {
     const audio = audioRef.current;
     if (!audio) return;
     const now = audio.currentTime;
     
-    // Find active subtitle line
-    const entry = subs.find((s) => now >= s.start && now <= s.end) || null;
+    // Find active subtitle line using Binary Search
+    const subIdx = binarySearchSubtitles(subs, now);
+    const entry = subIdx !== -1 ? subs[subIdx] : null;
     setActiveSub(entry);
 
-    if (entry) {
-      setCurrentSegmentIndex(entry.segment_index);
-    } else if (subs.length > 0) {
-      // Find the last segment that finished before 'now'
-      const preceding = subs.filter((s) => s.end <= now);
-      if (preceding.length > 0) {
-        const sorted = preceding.sort((a, b) => b.end - a.end);
-        setCurrentSegmentIndex(sorted[0].segment_index);
-      } else {
-        setCurrentSegmentIndex(null);
-      }
-    }
+    // Subtitle segment updates are processed via activeSub state
 
     if (now === 0) {
       setDisplayedText('');
     }
 
-    // Loop logic: if loop segment is checked, loop current subtitle segment
+    // Loop logic
     if (loop && entry && now >= entry.end - 0.05) {
       audio.currentTime = entry.start;
     }
@@ -211,17 +229,10 @@ export default function GlobalPlayer({
       const headers = { 'X-Access-Token': getToken() };
       await cache.add(new Request(activeAudio.audio_url, { headers }));
       await cache.add(new Request(activeAudio.subtitle_json_url, { headers }));
-      alert(t('offlineSuccess'));
+      toast(t('offlineSuccess'), 'success');
     } catch {
-      alert(t('offlineFailed'));
+      toast(t('offlineFailed'), 'error');
     }
-  }
-
-  function formatTime(secs: number) {
-    if (isNaN(secs)) return '0:00';
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -235,12 +246,11 @@ export default function GlobalPlayer({
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (isPlaying) {
+    if (!audio.paused) {
       audio.pause();
     } else {
       if (audio.ended || audio.currentTime >= audio.duration - 0.1) {
         audio.currentTime = 0;
-        // Small delay to prevent browser seeking race condition
         setTimeout(() => {
           audio.play().catch(() => undefined);
         }, 50);
@@ -308,7 +318,7 @@ export default function GlobalPlayer({
             variant="ghost"
             size="iconSm"
             className={isSubtitlesOpen ? 'bg-secondary text-ring' : 'text-muted-foreground'}
-            onClick={onOpenSubtitles}
+            onClick={() => setIsSubtitlesOpen(!isSubtitlesOpen)}
             title={t('subtitleTranscript')}
           >
             <ListMusic size={15} />
@@ -351,18 +361,15 @@ export default function GlobalPlayer({
             onLoadedMetadata={handleLoadedMetadata}
             onPlay={() => {
               setIsPlaying(true);
-              window.dispatchEvent(new CustomEvent('player-play'));
             }}
             onPause={() => {
               handlePause();
-              window.dispatchEvent(new CustomEvent('player-pause'));
             }}
             onEnded={() => {
               if (audioRef.current) {
                 audioRef.current.currentTime = 0;
               }
               handlePause();
-              window.dispatchEvent(new CustomEvent('player-pause'));
             }}
           />
 

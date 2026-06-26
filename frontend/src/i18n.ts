@@ -66,6 +66,7 @@ export const translations = {
 
     // LibraryPane
     searchInLibrary: '搜索文档...',
+    search: '搜索',
     sortBy: '排序方式',
     uploadDate: '上传时间',
     fileSize: '文件大小',
@@ -208,6 +209,7 @@ export const translations = {
 
     // LibraryPane
     searchInLibrary: 'Search in library...',
+    search: 'Search',
     sortBy: 'Sort by',
     uploadDate: 'Upload Date',
     fileSize: 'File Size',

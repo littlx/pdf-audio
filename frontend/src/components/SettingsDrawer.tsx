@@ -1,93 +1,55 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Cpu, Palette, Save, Volume2, X } from 'lucide-react';
 import { api } from '../api/client';
 import type { AppSettings, SettingsUpdatePayload, TtsVoice } from '../api/types';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-
-const defaultSettings: AppSettings = {
-  ai_base_url: '',
-  ai_model: '',
-  default_bilingual_format: 'sentence_pair',
-  default_output_style: 'faithful',
-  english_voice: 'en-US-JennyNeural',
-  chinese_voice: 'zh-CN-XiaoxiaoNeural',
-  english_rate: '+0%',
-  chinese_rate: '+0%',
-  english_volume: '+0%',
-  chinese_volume: '+0%',
-  pause_between_languages_ms: 500,
-  pause_between_segments_ms: 800,
-  subtitle_font_size: 'medium',
-  subtitle_color: 'default',
-  dark_mode: false,
-};
-
-import type { Language } from '../i18n';
+import { useT } from '../context/I18nContext';
+import { useSettings } from '../context/SettingsContext';
+import LanguageToggle from './LanguageToggle';
 
 type SettingsDrawerProps = {
   isOpen: boolean;
   onClose: () => void;
-  onThemeChange?: (isDark: boolean) => void;
-  lang: Language;
-  onLanguageChange: (lang: Language) => void;
-  t: (key: any) => string;
 };
 
-export default function SettingsDrawer({
-  isOpen,
-  onClose,
-  onThemeChange,
-  lang,
-  onLanguageChange,
-  t,
-}: SettingsDrawerProps) {
-  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps) {
+  const { t, lang } = useT();
+  const {
+    settings,
+    loadSettings,
+    updateSettings,
+    clearServerCache,
+    error,
+    setError,
+  } = useSettings();
+
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
-    api<AppSettings>('/api/settings')
-      .then((data) => {
-        const loaded = { ...defaultSettings, ...data };
-        setSettings(loaded);
-        if (onThemeChange) {
-          onThemeChange(loaded.dark_mode);
-        }
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load settings'));
+    loadSettings().catch(() => undefined);
     
     api<TtsVoice[]>('/api/settings/tts-voices')
       .then(setVoices)
       .catch(() => setVoices([]));
   }, [isOpen]);
 
-  function set<K extends keyof AppSettings>(key: K, value: AppSettings[K]) {
-    setSettings({ ...settings, [key]: value });
-  }
+  const setSettingsField = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
+    updateSettings({ ...settings, [key]: value } as SettingsUpdatePayload)
+      .then(() => loadSettings())
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to update field'));
+  };
 
   function buildPayload(): SettingsUpdatePayload {
-    const payload: SettingsUpdatePayload = {
-      ai_base_url: settings.ai_base_url,
-      ai_model: settings.ai_model,
-      default_bilingual_format: settings.default_bilingual_format,
-      default_output_style: settings.default_output_style,
-      english_voice: settings.english_voice,
-      chinese_voice: settings.chinese_voice,
-      english_rate: settings.english_rate,
-      chinese_rate: settings.chinese_rate,
-      english_volume: settings.english_volume,
-      chinese_volume: settings.chinese_volume,
-      pause_between_languages_ms: settings.pause_between_languages_ms,
-      pause_between_segments_ms: settings.pause_between_segments_ms,
-      subtitle_font_size: settings.subtitle_font_size,
-      subtitle_color: settings.subtitle_color,
-      dark_mode: settings.dark_mode,
-    };
-    if (apiKeyInput.trim()) payload.ai_api_key = apiKeyInput.trim();
+    // Exclude read-only/masked API key fields from settings spread
+    const { ai_api_key_configured, ai_api_key_masked, ...rest } = settings;
+    const payload: SettingsUpdatePayload = { ...rest };
+    if (apiKeyInput.trim()) {
+      payload.ai_api_key = apiKeyInput.trim();
+    }
     return payload;
   }
 
@@ -95,27 +57,20 @@ export default function SettingsDrawer({
     setError('');
     setMessage('');
     try {
-      const saved = await api<AppSettings>('/api/settings', {
-        method: 'PUT',
-        body: JSON.stringify(buildPayload()),
-      });
-      setSettings({ ...defaultSettings, ...saved });
+      await updateSettings(buildPayload());
       setApiKeyInput('');
       setMessage(t('settingsSaved'));
-      if (onThemeChange) {
-        onThemeChange(saved.dark_mode);
-      }
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save settings');
     }
   }
 
-  async function clearCache() {
+  async function handleClearCache() {
     setError('');
     setMessage('');
     try {
-      await api('/api/settings/clear-cache', { method: 'POST' });
+      await clearServerCache();
       setMessage(t('cacheCleared'));
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
@@ -133,6 +88,10 @@ export default function SettingsDrawer({
   async function preview(lang: 'english' | 'chinese') {
     setError('');
     try {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
       const voice = lang === 'english' ? settings.english_voice : settings.chinese_voice;
       const response = await api<Response>('/api/settings/tts-preview', {
         method: 'POST',
@@ -141,8 +100,15 @@ export default function SettingsDrawer({
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      audio.onerror = () => URL.revokeObjectURL(url);
+      previewAudioRef.current = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        if (previewAudioRef.current === audio) previewAudioRef.current = null;
+      };
+      audio.onerror = () => {
+        URL.revokeObjectURL(url);
+        if (previewAudioRef.current === audio) previewAudioRef.current = null;
+      };
       await audio.play();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to preview voice');
@@ -178,7 +144,7 @@ export default function SettingsDrawer({
                 <label>{t('apiBaseUrl')}</label>
                 <input
                   value={settings.ai_base_url}
-                  onChange={(e) => set('ai_base_url', e.target.value)}
+                  onChange={(e) => setSettingsField('ai_base_url', e.target.value)}
                   placeholder="https://api.deepseek.com"
                 />
               </div>
@@ -195,7 +161,7 @@ export default function SettingsDrawer({
                 <label>{t('modelName')}</label>
                 <input
                   value={settings.ai_model}
-                  onChange={(e) => set('ai_model', e.target.value)}
+                  onChange={(e) => setSettingsField('ai_model', e.target.value)}
                   placeholder="deepseek-v4-flash"
                 />
               </div>
@@ -204,7 +170,7 @@ export default function SettingsDrawer({
                   <label>{t('format')}</label>
                   <select
                     value={settings.default_bilingual_format}
-                    onChange={(e) => set('default_bilingual_format', e.target.value as AppSettings['default_bilingual_format'])}
+                    onChange={(e) => setSettingsField('default_bilingual_format', e.target.value as AppSettings['default_bilingual_format'])}
                   >
                     <option value="sentence_pair">{t('sentencePair')}</option>
                     <option value="paragraph_pair">{t('paragraphPair')}</option>
@@ -214,7 +180,7 @@ export default function SettingsDrawer({
                   <label>{t('translationStyle')}</label>
                   <select
                     value={settings.default_output_style}
-                    onChange={(e) => set('default_output_style', e.target.value as AppSettings['default_output_style'])}
+                    onChange={(e) => setSettingsField('default_output_style', e.target.value as AppSettings['default_output_style'])}
                   >
                     <option value="faithful">{t('faithful')}</option>
                     <option value="plain_explanation">{t('plainExplanation')}</option>
@@ -237,7 +203,7 @@ export default function SettingsDrawer({
                 <label>{t('englishVoice')}</label>
                 <select
                   value={settings.english_voice}
-                  onChange={(e) => set('english_voice', e.target.value)}
+                  onChange={(e) => setSettingsField('english_voice', e.target.value)}
                   className="text-xs"
                 >
                   {(englishVoices.length ? englishVoices : voices).map((voice) => (
@@ -251,7 +217,7 @@ export default function SettingsDrawer({
                 <label>{t('chineseVoice')}</label>
                 <select
                   value={settings.chinese_voice}
-                  onChange={(e) => set('chinese_voice', e.target.value)}
+                  onChange={(e) => setSettingsField('chinese_voice', e.target.value)}
                   className="text-xs"
                 >
                   {(chineseVoices.length ? chineseVoices : voices).map((voice) => (
@@ -265,22 +231,22 @@ export default function SettingsDrawer({
               <div className="grid grid-cols-2 gap-2">
                 <div className="form-group">
                   <label>{t('englishRate')}</label>
-                  <input value={settings.english_rate} onChange={(e) => set('english_rate', e.target.value)} />
+                  <input value={settings.english_rate} onChange={(e) => setSettingsField('english_rate', e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label>{t('chineseRate')}</label>
-                  <input value={settings.chinese_rate} onChange={(e) => set('chinese_rate', e.target.value)} />
+                  <input value={settings.chinese_rate} onChange={(e) => setSettingsField('chinese_rate', e.target.value)} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="form-group">
                   <label>{t('englishVolume')}</label>
-                  <input value={settings.english_volume} onChange={(e) => set('english_volume', e.target.value)} />
+                  <input value={settings.english_volume} onChange={(e) => setSettingsField('english_volume', e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label>{t('chineseVolume')}</label>
-                  <input value={settings.chinese_volume} onChange={(e) => set('chinese_volume', e.target.value)} />
+                  <input value={settings.chinese_volume} onChange={(e) => setSettingsField('chinese_volume', e.target.value)} />
                 </div>
               </div>
 
@@ -290,7 +256,7 @@ export default function SettingsDrawer({
                   <input
                     type="number"
                     value={settings.pause_between_languages_ms}
-                    onChange={(e) => set('pause_between_languages_ms', Number(e.target.value))}
+                    onChange={(e) => setSettingsField('pause_between_languages_ms', Number(e.target.value))}
                   />
                 </div>
                 <div className="form-group">
@@ -298,7 +264,7 @@ export default function SettingsDrawer({
                   <input
                     type="number"
                     value={settings.pause_between_segments_ms}
-                    onChange={(e) => set('pause_between_segments_ms', Number(e.target.value))}
+                    onChange={(e) => setSettingsField('pause_between_segments_ms', Number(e.target.value))}
                   />
                 </div>
               </div>
@@ -325,28 +291,7 @@ export default function SettingsDrawer({
                 <label className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
                   {t('language')}
                 </label>
-                <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-semibold transition-colors ${lang === 'zh' ? 'text-foreground' : 'text-muted-foreground'}`}>
-                    简体中文
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => onLanguageChange(lang === 'zh' ? 'en' : 'zh')}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none cursor-pointer ${
-                      lang === 'en' ? 'bg-ring' : 'bg-secondary border border-border'
-                    }`}
-                    aria-label="Toggle Language"
-                  >
-                    <span
-                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-foreground transition-transform duration-200 ${
-                        lang === 'en' ? 'translate-x-[18px]' : 'translate-x-[2px]'
-                      }`}
-                    />
-                  </button>
-                  <span className={`text-[11px] font-semibold transition-colors ${lang === 'en' ? 'text-foreground' : 'text-muted-foreground'}`}>
-                    English
-                  </span>
-                </div>
+                <LanguageToggle size="sm" />
               </div>
 
               <div className="flex items-center justify-between">
@@ -356,7 +301,7 @@ export default function SettingsDrawer({
                 <input
                   type="checkbox"
                   checked={settings.dark_mode}
-                  onChange={(e) => set('dark_mode', e.target.checked)}
+                  onChange={(e) => setSettingsField('dark_mode', e.target.checked)}
                   className="w-4 h-4 accent-ring cursor-pointer"
                 />
               </div>
@@ -365,7 +310,7 @@ export default function SettingsDrawer({
                 <label>{t('subFontSize')}</label>
                 <select
                   value={settings.subtitle_font_size}
-                  onChange={(e) => set('subtitle_font_size', e.target.value as AppSettings['subtitle_font_size'])}
+                  onChange={(e) => setSettingsField('subtitle_font_size', e.target.value as AppSettings['subtitle_font_size'])}
                 >
                   <option value="small">{lang === 'zh' ? '小' : 'Small'}</option>
                   <option value="medium">{lang === 'zh' ? '中' : 'Medium'}</option>
@@ -377,7 +322,7 @@ export default function SettingsDrawer({
                 <label>{t('subAccentColor')}</label>
                 <input
                   value={settings.subtitle_color}
-                  onChange={(e) => set('subtitle_color', e.target.value)}
+                  onChange={(e) => setSettingsField('subtitle_color', e.target.value)}
                   placeholder="default"
                 />
               </div>
@@ -386,7 +331,7 @@ export default function SettingsDrawer({
                 <label className="font-semibold text-xs text-muted-foreground uppercase tracking-wider block mb-1">
                   {t('serverCache')}
                 </label>
-                <Button variant="secondary" size="sm" className="w-full" onClick={clearCache}>
+                <Button variant="secondary" size="sm" className="w-full" onClick={handleClearCache}>
                   {t('clearCacheBtn')}
                 </Button>
               </div>

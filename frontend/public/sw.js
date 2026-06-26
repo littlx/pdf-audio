@@ -1,6 +1,6 @@
 const STATIC_CACHE = 'sub-pdf-static-v1';
 const OFFLINE_CACHE = 'sub-pdf-offline-audio-v1';
-const STATIC_ASSETS = ['/', '/player', '/manifest.webmanifest'];
+const STATIC_ASSETS = ['/', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS)).catch(() => undefined));

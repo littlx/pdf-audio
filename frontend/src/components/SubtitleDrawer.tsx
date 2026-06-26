@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Copy, Search, X } from 'lucide-react';
 import type { SubtitleEntry } from '../api/types';
 import { Button } from './ui/button';
+import { useT } from '../context/I18nContext';
+import { usePlayer } from '../context/PlayerContext';
 
 function groupSubtitles(entries: SubtitleEntry[]) {
   const groups = new Map<number, { english?: SubtitleEntry; chinese?: SubtitleEntry }>();
@@ -14,35 +16,22 @@ function groupSubtitles(entries: SubtitleEntry[]) {
   return Array.from(groups.entries()).map(([index, value]) => ({ index, ...value }));
 }
 
-type SubtitleDrawerProps = {
-  isOpen: boolean;
-  onClose: () => void;
-  subs: SubtitleEntry[];
-  activeSub: SubtitleEntry | null;
-  onSeek: (time: number) => void;
-  hideEn: boolean;
-  hideZh: boolean;
-  dictation: boolean;
-  setHideEn: (val: boolean) => void;
-  setHideZh: (val: boolean) => void;
-  setDictation: (val: boolean) => void;
-  t: (key: any) => string;
-};
+export default function SubtitleDrawer() {
+  const { t } = useT();
+  const {
+    isSubtitlesOpen,
+    setIsSubtitlesOpen,
+    subs,
+    activeSub,
+    setSeekTime,
+    hideEn,
+    setHideEn,
+    hideZh,
+    setHideZh,
+    dictation,
+    setDictation,
+  } = usePlayer();
 
-export default function SubtitleDrawer({
-  isOpen,
-  onClose,
-  subs,
-  activeSub,
-  onSeek,
-  hideEn,
-  hideZh,
-  dictation,
-  setHideEn,
-  setHideZh,
-  setDictation,
-  t,
-}: SubtitleDrawerProps) {
   const [query, setQuery] = useState('');
   const activeItemRef = useRef<HTMLDivElement>(null);
 
@@ -58,25 +47,25 @@ export default function SubtitleDrawer({
 
   // Scroll active segment into view in the drawer
   useEffect(() => {
-    if (isOpen && activeItemRef.current) {
+    if (isSubtitlesOpen && activeItemRef.current) {
       activeItemRef.current.scrollIntoView({
-        behavior: 'smooth',
+        behavior: 'auto',
         block: 'nearest',
       });
     }
-  }, [isOpen, activeSub?.segment_index]);
+  }, [isSubtitlesOpen, activeSub?.segment_index]);
 
-  if (!isOpen) return null;
+  if (!isSubtitlesOpen) return null;
 
   return (
     <>
-      <div className="subtitle-drawer-backdrop" onClick={onClose} />
+      <div className="subtitle-drawer-backdrop" onClick={() => setIsSubtitlesOpen(false)} />
       <div className="subtitle-drawer-panel" role="dialog" aria-labelledby="sub-drawer-title">
         <div className="subtitle-drawer-header">
           <h2 id="sub-drawer-title" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             {t('subtitleTranscript')}
           </h2>
-          <Button variant="ghost" size="iconSm" onClick={onClose} aria-label="Close subtitles">
+          <Button variant="ghost" size="iconSm" onClick={() => setIsSubtitlesOpen(false)} aria-label="Close subtitles">
             <X size={15} />
           </Button>
         </div>
@@ -134,7 +123,7 @@ export default function SubtitleDrawer({
                 className={`subtitle-segment-row ${isActive ? 'is-active' : ''}`}
                 onClick={() => {
                   const entry = group.english || group.chinese;
-                  if (entry) onSeek(entry.start);
+                  if (entry) setSeekTime(entry.start);
                 }}
               >
                 <span className="segment-num">

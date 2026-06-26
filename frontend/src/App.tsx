@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Lock, Settings, FileText, Headphones, Wand2, ShieldAlert } from 'lucide-react';
+import { BookOpen, Lock, Settings, FileText, Headphones, Wand2 } from 'lucide-react';
 import AccessGate from './components/AccessGate';
 import LibraryPane from './components/LibraryPane';
 import PdfReaderPane from './components/PdfReaderPane';
@@ -8,89 +8,33 @@ import GlobalPlayer from './components/GlobalPlayer';
 import SubtitleDrawer from './components/SubtitleDrawer';
 import SettingsDrawer from './components/SettingsDrawer';
 import MediaPane from './components/MediaPane';
-import type { PdfFile, Task, AudioFile, SubtitleEntry, AppSettings } from './api/types';
-import { api, clearOfflineCaches, clearToken, getToken } from './api/client';
+import type { PdfFile, AudioFile } from './api/types';
+import { clearOfflineCaches, clearToken, getToken } from './api/client';
 import { Button } from '@/components/ui/button';
-import { translations } from './i18n';
-import type { Language } from './i18n';
 
-export default function App() {
-  const [lang, setLang] = useState<Language>(() => {
-    return (localStorage.getItem('app-language') as Language) || 'zh';
-  });
+import { I18nProvider, useT } from './context/I18nContext';
+import { SettingsProvider } from './context/SettingsContext';
+import { PlayerProvider, usePlayer } from './context/PlayerContext';
 
-  const t = (key: keyof typeof translations['zh']) => {
-    return translations[lang][key] || translations['en'][key] || key;
-  };
+function DashboardContent({
+  unlocked,
+  onUnlock,
+  onLogout,
+}: {
+  unlocked: boolean;
+  onUnlock: () => void;
+  onLogout: () => void;
+}) {
+  const { t } = useT();
+  const {
+    activeAudio,
+    setActiveAudio,
+    setIsSubtitlesOpen,
+  } = usePlayer();
 
-  const handleLanguageChange = (newLang: Language) => {
-    setLang(newLang);
-    localStorage.setItem('app-language', newLang);
-  };
-
-  const [unlocked, setUnlocked] = useState(Boolean(getToken()));
   const [selectedPdf, setSelectedPdf] = useState<PdfFile | undefined>(undefined);
-  const [selectedText, setSelectedText] = useState('');
-  const [activeAudio, setActiveAudio] = useState<AudioFile | null>(null);
   const [leftTab, setLeftTab] = useState<'library' | 'media' | 'reader'>('library');
-  const [tasks, setTasks] = useState<Task[]>([]);
-  
-  // Settings Drawer and Theme States
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isDark, setIsDark] = useState(false);
-
-  // Global Player States
-  const [activeSub, setActiveSub] = useState<SubtitleEntry | null>(null);
-  const [subs, setSubs] = useState<SubtitleEntry[]>([]);
-  const [isSubtitlesOpen, setIsSubtitlesOpen] = useState(false);
-  const [seekTime, setSeekTime] = useState<number | null>(null);
-  const [hideEn, setHideEn] = useState(false);
-  const [hideZh, setHideZh] = useState(false);
-  const [dictation, setDictation] = useState(false);
-
-  // Sync theme
-  useEffect(() => {
-    const root = document.documentElement;
-    if (isDark) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-  }, [isDark]);
-
-  // Load settings on unlock
-  useEffect(() => {
-    if (!unlocked) return;
-    api<AppSettings>('/api/settings')
-      .then((data) => {
-        setIsDark(Boolean(data.dark_mode));
-      })
-      .catch(() => undefined);
-  }, [unlocked]);
-
-  // Periodically fetch global active tasks
-  useEffect(() => {
-    if (!unlocked) return;
-    const loadTasks = () =>
-      api<Task[]>('/api/tasks')
-        .then(setTasks)
-        .catch(() => undefined);
-    loadTasks();
-    const timer = setInterval(loadTasks, 5000);
-    return () => clearInterval(timer);
-  }, [unlocked]);
-
-  // Load initial audio file
-  useEffect(() => {
-    if (!unlocked) return;
-    api<AudioFile[]>('/api/audios')
-      .then((list) => {
-        if (list && list.length > 0) {
-          setActiveAudio(list[0]);
-        }
-      })
-      .catch(() => undefined);
-  }, [unlocked]);
 
   // If selectedPdf changes, sync left tab to 'reader'
   useEffect(() => {
@@ -102,41 +46,12 @@ export default function App() {
   }, [selectedPdf]);
 
   if (!unlocked) {
-    return (
-      <AccessGate
-        onUnlock={() => setUnlocked(true)}
-        t={t}
-        lang={lang}
-        onLanguageChange={handleLanguageChange}
-      />
-    );
-  }
-
-  const activeTasks = tasks.filter((task) => !['completed', 'canceled'].includes(task.status));
-  const failedTasks = tasks.filter((task) => task.status === 'failed');
-
-  function handleSelectPdf(pdf: PdfFile) {
-    setSelectedPdf(pdf);
-  }
-
-  function handleOpenConvert(pdf: PdfFile) {
-    setSelectedPdf(pdf);
-  }
-
-  function handleSendToConvert(text: string) {
-    setSelectedText(text);
+    return <AccessGate onUnlock={onUnlock} />;
   }
 
   function handleConversionComplete(audio: AudioFile) {
-    // When conversion completes, load audio into player and auto-open subtitle drawer
     setActiveAudio(audio);
     setIsSubtitlesOpen(true);
-  }
-
-  function handleLogout() {
-    clearToken();
-    clearOfflineCaches();
-    setUnlocked(false);
   }
 
   return (
@@ -155,7 +70,7 @@ export default function App() {
             <Settings size={14} />
             <span>{t('settings')}</span>
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="header-btn is-lock">
+          <Button variant="ghost" size="sm" onClick={onLogout} className="header-btn is-lock">
             <Lock size={14} />
             <span>{t('lock')}</span>
           </Button>
@@ -212,21 +127,16 @@ export default function App() {
             <div style={{ display: leftTab === 'library' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
               <LibraryPane
                 activePdfId={selectedPdf?.id}
-                onSelectPdf={handleSelectPdf}
-                onOpenConvert={handleOpenConvert}
-                t={t}
+                onSelectPdf={setSelectedPdf}
+                onOpenConvert={setSelectedPdf}
               />
             </div>
             <div style={{ display: leftTab === 'media' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
-              <MediaPane
-                activeAudio={activeAudio}
-                onSelectAudio={setActiveAudio}
-                t={t}
-              />
+              <MediaPane />
             </div>
             {selectedPdf && (
               <div style={{ display: leftTab === 'reader' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
-                <PdfReaderPane pdf={selectedPdf} onSendToConvert={handleSendToConvert} />
+                <PdfReaderPane pdf={selectedPdf} />
               </div>
             )}
           </div>
@@ -246,58 +156,52 @@ export default function App() {
           <div className="pane-content">
             <ConvertPane
               pdf={selectedPdf}
-              initialText={selectedText}
               onConversionComplete={handleConversionComplete}
-              t={t}
             />
           </div>
         </section>
       </main>
 
       {/* Global Bottom Audio Player */}
-      <GlobalPlayer
-        activeAudio={activeAudio}
-        onOpenSubtitles={() => setIsSubtitlesOpen(!isSubtitlesOpen)}
-        isSubtitlesOpen={isSubtitlesOpen}
-        onSubtitlesLoaded={setSubs}
-        activeSub={activeSub}
-        setActiveSub={setActiveSub}
-        seekTime={seekTime}
-        onSeekReset={() => setSeekTime(null)}
-        hideEn={hideEn}
-        hideZh={hideZh}
-        dictation={dictation}
-        setHideEn={setHideEn}
-        setHideZh={setHideZh}
-        setDictation={setDictation}
-        t={t}
-      />
+      <GlobalPlayer />
 
       {/* Drawer overlay for all subtitles */}
-      <SubtitleDrawer
-        isOpen={isSubtitlesOpen}
-        onClose={() => setIsSubtitlesOpen(false)}
-        subs={subs}
-        activeSub={activeSub}
-        onSeek={setSeekTime}
-        hideEn={hideEn}
-        hideZh={hideZh}
-        dictation={dictation}
-        setHideEn={setHideEn}
-        setHideZh={setHideZh}
-        setDictation={setDictation}
-        t={t}
-      />
+      <SubtitleDrawer />
 
       {/* Settings Panel */}
       <SettingsDrawer
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        onThemeChange={(dark) => setIsDark(dark)}
-        lang={lang}
-        onLanguageChange={handleLanguageChange}
-        t={t}
       />
     </div>
+  );
+}
+
+import { ToastProvider } from './context/ToastContext';
+
+export default function App() {
+  const [unlocked, setUnlocked] = useState(Boolean(getToken()));
+
+  const handleUnlock = () => setUnlocked(true);
+  const handleLogout = () => {
+    clearToken();
+    clearOfflineCaches();
+    setUnlocked(false);
+  };
+
+  return (
+    <I18nProvider>
+      <SettingsProvider unlocked={unlocked}>
+        <PlayerProvider unlocked={unlocked}>
+          <ToastProvider>
+            <DashboardContent
+              unlocked={unlocked}
+              onUnlock={handleUnlock}
+              onLogout={handleLogout}
+            />
+          </ToastProvider>
+        </PlayerProvider>
+      </SettingsProvider>
+    </I18nProvider>
   );
 }

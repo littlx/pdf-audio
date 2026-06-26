@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, RefreshCw, XCircle, RotateCcw, HelpCircle, FileText, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { api } from '../api/client';
 import type { AppSettings, AudioFile, PdfFile, Task } from '../api/types';
 import { Button } from './ui/button';
+import { useT } from '../context/I18nContext';
+import { useToast } from '../context/ToastContext';
 
 const defaultSettings = {
   default_bilingual_format: 'sentence_pair',
@@ -15,7 +17,6 @@ type ConvertPaneProps = {
   pdf?: PdfFile;
   initialText?: string;
   onConversionComplete?: (audio: AudioFile) => void;
-  t: (key: any) => string;
 };
 
 function canPause(status: string) {
@@ -31,7 +32,20 @@ function canRetry(status: string) {
   return ['failed', 'paused', 'canceled'].includes(status);
 }
 
-export default function ConvertPane({ pdf, initialText = '', onConversionComplete, t }: ConvertPaneProps) {
+const mergeTask = (prev: Task | null, incoming: Task): Task => {
+  if (!prev || prev.id !== incoming.id) return incoming;
+  return {
+    ...prev,
+    ...incoming,
+    segments: incoming.segments?.length ? incoming.segments : prev.segments,
+    extracted_text: incoming.extracted_text || prev.extracted_text,
+  };
+};
+
+export default function ConvertPane({ pdf, initialText = '', onConversionComplete }: ConvertPaneProps) {
+  const { t } = useT();
+  const { toast } = useToast();
+
   const [pageExpression, setPageExpression] = useState('1');
   const [format, setFormat] = useState<AppSettings['default_bilingual_format']>(defaultSettings.default_bilingual_format);
   const [style, setStyle] = useState<AppSettings['default_output_style']>(defaultSettings.default_output_style);
@@ -103,47 +117,49 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
   }
 
-  // SSE and Polling for task tracking
+  // SSE and Polling fallback for task tracking
   useEffect(() => {
     if (!task) return;
+    let timer: any = null;
     const source = new EventSource(`/api/tasks/${task.id}/events`);
-    
-    const timer = setInterval(async () => {
-      try {
-        const data = await api<Task>(`/api/tasks/${task.id}`);
-        setTask(prev => {
-          if (!prev || prev.id !== data.id) return data;
-          return {
-            ...prev,
-            ...data,
-            segments: data.segments?.length ? data.segments : prev.segments,
-            extracted_text: data.extracted_text || prev.extracted_text,
-          };
-        });
-        if (data.extracted_text) setEditableText(data.extracted_text);
-        findCompletedAudio(data).catch(() => undefined);
-      } catch {}
-    }, 2500);
 
-    source.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      setTask(prev => {
-        if (!prev || prev.id !== data.id) return data;
-        return {
-          ...prev,
-          ...data,
-          segments: data.segments?.length ? data.segments : prev.segments,
-          extracted_text: data.extracted_text || prev.extracted_text,
-        };
-      });
-      findCompletedAudio(data).catch(() => undefined);
+    const startPolling = () => {
+      if (timer) return;
+      timer = setInterval(async () => {
+        try {
+          const data = await api<Task>(`/api/tasks/${task.id}`);
+          setTask(prev => {
+            const merged = mergeTask(prev, data);
+            if (merged.extracted_text) setEditableText(merged.extracted_text);
+            findCompletedAudio(merged).catch(() => undefined);
+            return merged;
+          });
+        } catch {}
+      }, 3000);
     };
 
-    source.onerror = () => source.close();
+    source.onmessage = (event) => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      const data = JSON.parse(event.data);
+      setTask(prev => {
+        const merged = mergeTask(prev, data);
+        if (merged.extracted_text) setEditableText(merged.extracted_text);
+        findCompletedAudio(merged).catch(() => undefined);
+        return merged;
+      });
+    };
+
+    source.onerror = () => {
+      source.close();
+      startPolling();
+    };
 
     return () => {
       source.close();
-      clearInterval(timer);
+      if (timer) clearInterval(timer);
     };
   }, [task?.id]);
 
@@ -152,16 +168,11 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     try {
       const data = await api<Task>(`/api/tasks/${task.id}`);
       setTask(prev => {
-        if (!prev || prev.id !== data.id) return data;
-        return {
-          ...prev,
-          ...data,
-          segments: data.segments?.length ? data.segments : prev.segments,
-          extracted_text: data.extracted_text || prev.extracted_text,
-        };
+        const merged = mergeTask(prev, data);
+        if (merged.extracted_text) setEditableText(merged.extracted_text);
+        findCompletedAudio(merged).catch(() => undefined);
+        return merged;
       });
-      if (data.extracted_text) setEditableText(data.extracted_text);
-      await findCompletedAudio(data);
     } catch {}
   }
 
@@ -171,18 +182,11 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       await api(`/api/tasks/${task.id}/text`, { method: 'PATCH', body: JSON.stringify({ text: editableText }) });
       const retried = await api<Task>(`/api/tasks/${task.id}/retry`, { method: 'POST' });
       notifiedTaskId.current = null;
-      setTask(prev => {
-        if (!prev || prev.id !== retried.id) return retried;
-        return {
-          ...prev,
-          ...retried,
-          segments: retried.segments?.length ? retried.segments : prev.segments,
-          extracted_text: retried.extracted_text || prev.extracted_text,
-        };
-      });
+      setTask(prev => mergeTask(prev, retried));
       await refresh();
+      toast('Text saved and task restarted', 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('saveTextFailed'));
+      toast(err instanceof Error ? err.message : t('saveTextFailed'), 'error');
     }
   }
 
@@ -194,15 +198,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
     try {
       const updated = await api<Task>(`/api/tasks/${task.id}/${action}`, { method: 'POST' });
-      setTask(prev => {
-        if (!prev || prev.id !== updated.id) return updated;
-        return {
-          ...prev,
-          ...updated,
-          segments: updated.segments?.length ? updated.segments : prev.segments,
-          extracted_text: updated.extracted_text || prev.extracted_text,
-        };
-      });
+      setTask(prev => mergeTask(prev, updated));
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : `${t('controlFailed')}: ${action}`);

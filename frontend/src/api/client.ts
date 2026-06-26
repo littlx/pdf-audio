@@ -44,14 +44,10 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
   const contentType = response.headers.get('content-type') || '';
   if (contentType.includes('application/json')) return response.json();
-  return response as T;
+  return response as any;
 }
 
 export async function clearOfflineCaches() {
   if ('caches' in window) await caches.delete(OFFLINE_CACHE);
   navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_OFFLINE_CACHE', cacheName: OFFLINE_CACHE });
-}
-
-export function authedUrl(url: string) {
-  return url;
 }

@@ -1,20 +1,16 @@
 import { useState } from 'react';
-import { Lock, Languages } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { api, clearOfflineCaches, clearToken, setToken } from '../api/client';
 import { Button } from './ui/button';
-import type { Language } from '../i18n';
+import { useT } from '../context/I18nContext';
+import LanguageToggle from './LanguageToggle';
 
 export default function AccessGate({
   onUnlock,
-  t,
-  lang,
-  onLanguageChange,
 }: {
   onUnlock: () => void;
-  t: (key: any) => string;
-  lang: Language;
-  onLanguageChange: (lang: Language) => void;
 }) {
+  const { t } = useT();
   const [token, setLocalToken] = useState('');
   const [error, setError] = useState('');
 
@@ -71,29 +67,7 @@ export default function AccessGate({
         </Button>
 
         {/* Small Language Switcher Toggle */}
-        <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-border w-full">
-          <Languages size={13} className="text-muted-foreground" />
-          <span className={`text-[10px] font-semibold transition-colors ${lang === 'zh' ? 'text-foreground' : 'text-muted-foreground'}`}>
-            简体中文
-          </span>
-          <button
-            type="button"
-            onClick={() => onLanguageChange(lang === 'zh' ? 'en' : 'zh')}
-            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none cursor-pointer ${
-              lang === 'en' ? 'bg-ring' : 'bg-secondary border border-border'
-            }`}
-            aria-label="Toggle Language"
-          >
-            <span
-              className={`inline-block h-2.5 w-2.5 transform rounded-full bg-foreground transition-transform duration-200 ${
-                lang === 'en' ? 'translate-x-[14.5px]' : 'translate-x-[1.5px]'
-              }`}
-            />
-          </button>
-          <span className={`text-[10px] font-semibold transition-colors ${lang === 'en' ? 'text-foreground' : 'text-muted-foreground'}`}>
-            English
-          </span>
-        </div>
+        <LanguageToggle size="xs" showIcon={true} centered={true} />
       </form>
     </main>
   );

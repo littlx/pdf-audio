@@ -2,7 +2,6 @@ import type { PdfFile } from '../api/types';
 
 type PdfReaderPaneProps = {
   pdf: PdfFile;
-  onSendToConvert: (text: string) => void;
 };
 
 export default function PdfReaderPane({ pdf }: PdfReaderPaneProps) {
