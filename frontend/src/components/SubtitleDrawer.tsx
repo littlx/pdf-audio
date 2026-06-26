@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, memo } from 'react';
+import { useEffect, useRef, useState, memo, useMemo } from 'react';
 import { Copy, Search, X } from 'lucide-react';
 import type { SubtitleEntry } from '../api/types';
 import { Button } from './ui/button';
@@ -90,14 +90,16 @@ export default function SubtitleDrawer() {
   const activeItemRef = useRef<HTMLDivElement>(null);
 
   // Group subtitles
-  const groups = groupSubtitles(subs).filter((g) => {
-    if (!query) return true;
-    const q = query.toLowerCase();
-    return (
-      (g.english?.text || '').toLowerCase().includes(q) ||
-      (g.chinese?.text || '').toLowerCase().includes(q)
-    );
-  });
+  const groups = useMemo(() => {
+    return groupSubtitles(subs).filter((g) => {
+      if (!query) return true;
+      const q = query.toLowerCase();
+      return (
+        (g.english?.text || '').toLowerCase().includes(q) ||
+        (g.chinese?.text || '').toLowerCase().includes(q)
+      );
+    });
+  }, [subs, query]);
 
   // Scroll active segment into view in the drawer
   useEffect(() => {
