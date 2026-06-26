@@ -27,7 +27,7 @@ async def synthesize(text: str, voice: str, output: Path, rate: str = "+0%", vol
 
 def ffprobe_duration(path: Path) -> float:
     result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path)],
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", str(path.resolve(strict=False))],
         check=True,
         capture_output=True,
         text=True,
@@ -38,7 +38,7 @@ def ffprobe_duration(path: Path) -> float:
 def silence_mp3(path: Path, duration_ms: int) -> None:
     duration = max(duration_ms, 0) / 1000
     subprocess.run(
-        ["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", str(duration), "-q:a", "9", "-acodec", "libmp3lame", str(path)],
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", str(duration), "-q:a", "9", "-acodec", "libmp3lame", str(path.resolve(strict=False))],
         check=True,
         capture_output=True,
     )
@@ -46,13 +46,17 @@ def silence_mp3(path: Path, duration_ms: int) -> None:
 
 def concat_mp3(files: list[Path], output: Path) -> None:
     list_file = output.parent / "concat.txt"
-    list_file.write_text("".join(f"file '{file.as_posix()}'\n" for file in files), encoding="utf-8")
-    subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file), "-c", "copy", str(output)], check=True, capture_output=True)
+    lines = []
+    for file in files:
+        safe_path = file.resolve(strict=False).as_posix().replace("'", "'\\''")
+        lines.append(f"file '{safe_path}'\n")
+    list_file.write_text("".join(lines), encoding="utf-8")
+    subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file.resolve(strict=False)), "-c", "copy", str(output.resolve(strict=False))], check=True, capture_output=True)
 
 
 def normalize_audio(input_path: Path, output_path: Path) -> None:
     subprocess.run(
-        ["ffmpeg", "-y", "-i", str(input_path), "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", str(output_path)],
+        ["ffmpeg", "-y", "-i", str(input_path.resolve(strict=False)), "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", str(output_path.resolve(strict=False))],
         check=True,
         capture_output=True,
     )
