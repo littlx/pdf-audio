@@ -12,7 +12,7 @@ export default function EditableTitle({
   initialTitle,
   onSave,
   titleClassName = 'pdf-title',
-  inputClassName = 'text-xs h-7 py-0 px-2 w-full font-semibold border border-ring focus:ring-1 focus:ring-ring rounded bg-card',
+  inputClassName = 'text-xs h-7 py-0 px-2 w-full min-w-0 font-semibold border border-ring focus:ring-1 focus:ring-ring rounded bg-card',
   doubleClickTip = 'Double-click to rename',
 }: EditableTitleProps) {
   const [isEditing, setIsEditing] = useState(false);
