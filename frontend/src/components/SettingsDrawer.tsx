@@ -23,10 +23,17 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
     setError,
   } = useSettings();
 
+  const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [message, setMessage] = useState('');
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setLocalSettings(settings);
+    }
+  }, [isOpen, settings]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -38,14 +45,12 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
   }, [isOpen]);
 
   const setSettingsField = <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
-    updateSettings({ ...settings, [key]: value } as SettingsUpdatePayload)
-      .then(() => loadSettings())
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to update field'));
+    setLocalSettings((prev) => ({ ...prev, [key]: value }));
   };
 
   function buildPayload(): SettingsUpdatePayload {
     // Exclude read-only/masked API key fields from settings spread
-    const { ai_api_key_configured, ai_api_key_masked, ...rest } = settings;
+    const { ai_api_key_configured, ai_api_key_masked, ...rest } = localSettings;
     const payload: SettingsUpdatePayload = { ...rest };
     if (apiKeyInput.trim()) {
       payload.ai_api_key = apiKeyInput.trim();
@@ -92,7 +97,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
         previewAudioRef.current.pause();
         previewAudioRef.current = null;
       }
-      const voice = lang === 'english' ? settings.english_voice : settings.chinese_voice;
+      const voice = lang === 'english' ? localSettings.english_voice : localSettings.chinese_voice;
       const response = await api<Response>('/api/settings/tts-preview', {
         method: 'POST',
         body: JSON.stringify({ lang, voice }),
@@ -143,7 +148,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
               <div className="form-group">
                 <label>{t('apiBaseUrl')}</label>
                 <input
-                  value={settings.ai_base_url}
+                  value={localSettings.ai_base_url}
                   onChange={(e) => setSettingsField('ai_base_url', e.target.value)}
                   placeholder="https://api.deepseek.com"
                 />
@@ -153,14 +158,14 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
                 <input
                   type="password"
                   value={apiKeyInput}
-                  placeholder={settings.ai_api_key_masked || t('leaveBlankToKeepKey')}
+                  placeholder={localSettings.ai_api_key_masked || t('leaveBlankToKeepKey')}
                   onChange={(e) => setApiKeyInput(e.target.value)}
                 />
               </div>
               <div className="form-group">
                 <label>{t('modelName')}</label>
                 <input
-                  value={settings.ai_model}
+                  value={localSettings.ai_model}
                   onChange={(e) => setSettingsField('ai_model', e.target.value)}
                   placeholder="deepseek-v4-flash"
                 />
@@ -169,7 +174,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
                 <div className="form-group">
                   <label>{t('format')}</label>
                   <select
-                    value={settings.default_bilingual_format}
+                    value={localSettings.default_bilingual_format}
                     onChange={(e) => setSettingsField('default_bilingual_format', e.target.value as AppSettings['default_bilingual_format'])}
                   >
                     <option value="sentence_pair">{t('sentencePair')}</option>
@@ -179,7 +184,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
                 <div className="form-group">
                   <label>{t('translationStyle')}</label>
                   <select
-                    value={settings.default_output_style}
+                    value={localSettings.default_output_style}
                     onChange={(e) => setSettingsField('default_output_style', e.target.value as AppSettings['default_output_style'])}
                   >
                     <option value="faithful">{t('faithful')}</option>
@@ -202,7 +207,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
               <div className="form-group">
                 <label>{t('englishVoice')}</label>
                 <select
-                  value={settings.english_voice}
+                  value={localSettings.english_voice}
                   onChange={(e) => setSettingsField('english_voice', e.target.value)}
                   className="text-xs"
                 >
@@ -216,7 +221,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
               <div className="form-group">
                 <label>{t('chineseVoice')}</label>
                 <select
-                  value={settings.chinese_voice}
+                  value={localSettings.chinese_voice}
                   onChange={(e) => setSettingsField('chinese_voice', e.target.value)}
                   className="text-xs"
                 >
@@ -231,22 +236,22 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
               <div className="grid grid-cols-2 gap-2">
                 <div className="form-group">
                   <label>{t('englishRate')}</label>
-                  <input value={settings.english_rate} onChange={(e) => setSettingsField('english_rate', e.target.value)} />
+                  <input value={localSettings.english_rate} onChange={(e) => setSettingsField('english_rate', e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label>{t('chineseRate')}</label>
-                  <input value={settings.chinese_rate} onChange={(e) => setSettingsField('chinese_rate', e.target.value)} />
+                  <input value={localSettings.chinese_rate} onChange={(e) => setSettingsField('chinese_rate', e.target.value)} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="form-group">
                   <label>{t('englishVolume')}</label>
-                  <input value={settings.english_volume} onChange={(e) => setSettingsField('english_volume', e.target.value)} />
+                  <input value={localSettings.english_volume} onChange={(e) => setSettingsField('english_volume', e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label>{t('chineseVolume')}</label>
-                  <input value={settings.chinese_volume} onChange={(e) => setSettingsField('chinese_volume', e.target.value)} />
+                  <input value={localSettings.chinese_volume} onChange={(e) => setSettingsField('chinese_volume', e.target.value)} />
                 </div>
               </div>
 
@@ -255,7 +260,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
                   <label>{t('langPause')}</label>
                   <input
                     type="number"
-                    value={settings.pause_between_languages_ms}
+                    value={localSettings.pause_between_languages_ms}
                     onChange={(e) => setSettingsField('pause_between_languages_ms', Number(e.target.value))}
                   />
                 </div>
@@ -263,7 +268,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
                   <label>{t('segmentPause')}</label>
                   <input
                     type="number"
-                    value={settings.pause_between_segments_ms}
+                    value={localSettings.pause_between_segments_ms}
                     onChange={(e) => setSettingsField('pause_between_segments_ms', Number(e.target.value))}
                   />
                 </div>
@@ -300,7 +305,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
                 </label>
                 <input
                   type="checkbox"
-                  checked={settings.dark_mode}
+                  checked={localSettings.dark_mode}
                   onChange={(e) => setSettingsField('dark_mode', e.target.checked)}
                   className="w-4 h-4 accent-ring cursor-pointer"
                 />
@@ -309,7 +314,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
               <div className="form-group">
                 <label>{t('subFontSize')}</label>
                 <select
-                  value={settings.subtitle_font_size}
+                  value={localSettings.subtitle_font_size}
                   onChange={(e) => setSettingsField('subtitle_font_size', e.target.value as AppSettings['subtitle_font_size'])}
                 >
                   <option value="small">{lang === 'zh' ? '小' : 'Small'}</option>
@@ -321,7 +326,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
               <div className="form-group">
                 <label>{t('subAccentColor')}</label>
                 <input
-                  value={settings.subtitle_color}
+                  value={localSettings.subtitle_color}
                   onChange={(e) => setSettingsField('subtitle_color', e.target.value)}
                   placeholder="default"
                 />

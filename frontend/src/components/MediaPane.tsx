@@ -35,7 +35,7 @@ export default function MediaPane() {
     if (!ok) return;
     try {
       await api(`/api/audios/${audio.id}`, { method: 'DELETE' });
-      toast('Audio deleted successfully', 'success');
+      toast(t('audioDeletedSuccess'), 'success');
       if (activeAudio?.id === audio.id) {
         setActiveAudio(null);
       }
@@ -78,7 +78,7 @@ export default function MediaPane() {
                           method: 'PATCH',
                           body: JSON.stringify({ title: newTitle }),
                         });
-                        toast('Rename successful', 'success');
+                        toast(t('renameSuccess'), 'success');
                         await load();
                       }}
                     />

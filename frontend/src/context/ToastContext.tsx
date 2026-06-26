@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { useT } from './I18nContext';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -18,6 +19,7 @@ type ToastContextType = {
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t } = useT();
   const [toasts, setToasts] = useState<Toast[]>([]);
   
   // Custom confirm dialog state
@@ -88,10 +90,10 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               <p className="text-xs font-bold leading-relaxed">{confirmDialog.message}</p>
               <div className="flex items-center justify-end gap-2 mt-2">
                 <Button variant="ghost" size="sm" onClick={() => confirmDialog.resolve(false)}>
-                  取消
+                  {t('cancel')}
                 </Button>
                 <Button variant="destructive" size="sm" onClick={() => confirmDialog.resolve(true)}>
-                  确认
+                  {t('confirm')}
                 </Button>
               </div>
             </div>

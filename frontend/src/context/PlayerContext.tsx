@@ -48,7 +48,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode; unlocked: boo
           const lastAudio = list.find((a) => a.id === lastId) || list[0];
           setActiveAudioState(lastAudio);
         }
-      } catch {}
+      } catch (err) {
+        console.error('Restore last audio failed:', err);
+      }
     };
     restoreLastAudio();
   }, [unlocked]);
@@ -63,7 +65,7 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode; unlocked: boo
   };
 
   const togglePlay = () => {
-    window.dispatchEvent(new CustomEvent('player-toggle-play-trigger'));
+    setIsPlaying((prev) => !prev);
   };
 
   return (

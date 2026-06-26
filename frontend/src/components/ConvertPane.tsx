@@ -91,7 +91,9 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
           onConversionComplete(audio);
         }
       }
-    } catch {}
+    } catch (err) {
+      console.error('findCompletedAudio failed:', err);
+    }
   }
 
   async function createTask() {
@@ -117,6 +119,17 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
   }
 
+  // Synchronize text updates and trigger audio completion callbacks when task changes
+  useEffect(() => {
+    if (!task) return;
+    if (task.extracted_text) {
+      setEditableText(prev => prev === task.extracted_text ? prev : task.extracted_text || '');
+    }
+    if (task.status === 'completed') {
+      findCompletedAudio(task).catch(() => undefined);
+    }
+  }, [task]);
+
   // SSE and Polling fallback for task tracking
   useEffect(() => {
     if (!task) return;
@@ -128,13 +141,10 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       timer = setInterval(async () => {
         try {
           const data = await api<Task>(`/api/tasks/${task.id}`);
-          setTask(prev => {
-            const merged = mergeTask(prev, data);
-            if (merged.extracted_text) setEditableText(merged.extracted_text);
-            findCompletedAudio(merged).catch(() => undefined);
-            return merged;
-          });
-        } catch {}
+          setTask(prev => mergeTask(prev, data));
+        } catch (err) {
+          console.error('Task polling failed:', err);
+        }
       }, 3000);
     };
 
@@ -144,12 +154,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         timer = null;
       }
       const data = JSON.parse(event.data);
-      setTask(prev => {
-        const merged = mergeTask(prev, data);
-        if (merged.extracted_text) setEditableText(merged.extracted_text);
-        findCompletedAudio(merged).catch(() => undefined);
-        return merged;
-      });
+      setTask(prev => mergeTask(prev, data));
     };
 
     source.onerror = () => {
@@ -167,13 +172,10 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     if (!task) return;
     try {
       const data = await api<Task>(`/api/tasks/${task.id}`);
-      setTask(prev => {
-        const merged = mergeTask(prev, data);
-        if (merged.extracted_text) setEditableText(merged.extracted_text);
-        findCompletedAudio(merged).catch(() => undefined);
-        return merged;
-      });
-    } catch {}
+      setTask(prev => mergeTask(prev, data));
+    } catch (err) {
+      console.error('Refresh task failed:', err);
+    }
   }
 
   async function saveText() {
@@ -184,7 +186,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       notifiedTaskId.current = null;
       setTask(prev => mergeTask(prev, retried));
       await refresh();
-      toast('Text saved and task restarted', 'success');
+      toast(t('textSavedTaskRestarted'), 'success');
     } catch (err) {
       toast(err instanceof Error ? err.message : t('saveTextFailed'), 'error');
     }

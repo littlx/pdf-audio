@@ -143,6 +143,11 @@ export const translations = {
     settingsSaved: '设置保存成功。',
     cacheCleared: '缓存已成功清除。',
     leaveBlankToKeepKey: '留空以保留现有密钥',
+    textSavedTaskRestarted: '文本已保存，任务已重新启动',
+    pdfDeletedSuccess: 'PDF 删除成功',
+    renameSuccess: '重命名成功',
+    audioDeletedSuccess: '音频删除成功',
+    confirm: '确认',
   },
   en: {
     // App
@@ -286,6 +291,11 @@ export const translations = {
     settingsSaved: 'Settings Saved',
     cacheCleared: 'Cache cleared successfully.',
     leaveBlankToKeepKey: 'Leave blank to keep existing key',
+    textSavedTaskRestarted: 'Text saved and task restarted',
+    pdfDeletedSuccess: 'PDF deleted successfully',
+    renameSuccess: 'Rename successful',
+    audioDeletedSuccess: 'Audio deleted successfully',
+    confirm: 'Confirm',
   },
 };
 

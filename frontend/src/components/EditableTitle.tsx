@@ -27,7 +27,8 @@ export default function EditableTitle({
     try {
       await onSave(value.trim());
       setIsEditing(false);
-    } catch {
+    } catch (err) {
+      console.error('Rename title failed:', err);
       setValue(initialTitle);
       setIsEditing(false);
     }

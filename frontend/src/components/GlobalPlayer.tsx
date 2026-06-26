@@ -48,6 +48,7 @@ export default function GlobalPlayer() {
     setHideZh,
     dictation,
     setDictation,
+    togglePlay,
   } = usePlayer();
 
   const [loop, setLoop] = useState(false);
@@ -57,6 +58,7 @@ export default function GlobalPlayer() {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const autoPlayTriggered = useRef<string | null>(null);
 
   function changeSpeed(rate: number) {
     if (audioRef.current) {
@@ -94,14 +96,25 @@ export default function GlobalPlayer() {
     }
   }, [seekTime]);
 
-  // Listen for context-triggered toggle play commands
+  // Control audio play/pause status when context isPlaying changes
   useEffect(() => {
-    const handleToggle = () => {
-      togglePlay();
-    };
-    window.addEventListener('player-toggle-play-trigger', handleToggle);
-    return () => window.removeEventListener('player-toggle-play-trigger', handleToggle);
-  }, []);
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      if (audio.paused) {
+        if (audio.ended || audio.currentTime >= audio.duration - 0.1) {
+          audio.currentTime = 0;
+        }
+        audio.play().catch(() => {
+          setIsPlaying(false);
+        });
+      }
+    } else {
+      if (!audio.paused) {
+        audio.pause();
+      }
+    }
+  }, [isPlaying]);
 
   // Load subtitles when audio file changes
   useEffect(() => {
@@ -147,10 +160,8 @@ export default function GlobalPlayer() {
       });
     }
 
-    // Auto play when audio switches
-    setTimeout(() => {
-      audioRef.current?.play().catch(() => undefined);
-    }, 150);
+    // Reset auto play trigger lock
+    autoPlayTriggered.current = null;
   }, [activeAudio?.id]);
 
   // Periodic state save (every 10s)
@@ -243,22 +254,7 @@ export default function GlobalPlayer() {
     }
   };
 
-  const togglePlay = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (!audio.paused) {
-      audio.pause();
-    } else {
-      if (audio.ended || audio.currentTime >= audio.duration - 0.1) {
-        audio.currentTime = 0;
-        setTimeout(() => {
-          audio.play().catch(() => undefined);
-        }, 50);
-      } else {
-        audio.play().catch(() => undefined);
-      }
-    }
-  };
+
 
   const handleTimeUpdate = () => {
     onTime();
@@ -370,6 +366,12 @@ export default function GlobalPlayer() {
                 audioRef.current.currentTime = 0;
               }
               handlePause();
+            }}
+            onCanPlay={() => {
+              if (activeAudio && autoPlayTriggered.current !== activeAudio.id) {
+                autoPlayTriggered.current = activeAudio.id;
+                audioRef.current?.play().catch(() => undefined);
+              }
             }}
           />
 

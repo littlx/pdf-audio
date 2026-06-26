@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, memo } from 'react';
 import { Copy, Search, X } from 'lucide-react';
 import type { SubtitleEntry } from '../api/types';
 import { Button } from './ui/button';
@@ -15,6 +15,60 @@ function groupSubtitles(entries: SubtitleEntry[]) {
   });
   return Array.from(groups.entries()).map(([index, value]) => ({ index, ...value }));
 }
+
+type SubtitleSegmentRowProps = {
+  group: { index: number; english?: SubtitleEntry; chinese?: SubtitleEntry };
+  isActive: boolean;
+  hideEn: boolean;
+  hideZh: boolean;
+  setSeekTime: (time: number) => void;
+  activeRef: React.RefObject<HTMLDivElement | null> | null;
+  copyTooltip: string;
+};
+
+const SubtitleSegmentRow = memo(({
+  group,
+  isActive,
+  hideEn,
+  hideZh,
+  setSeekTime,
+  activeRef,
+  copyTooltip,
+}: SubtitleSegmentRowProps) => {
+  return (
+    <div
+      ref={activeRef}
+      className={`subtitle-segment-row ${isActive ? 'is-active' : ''}`}
+      onClick={() => {
+        const entry = group.english || group.chinese;
+        if (entry) setSeekTime(entry.start);
+      }}
+    >
+      <span className="segment-num">
+        {String(group.index + 1).padStart(2, '0')}
+      </span>
+      <div className="subtitle-texts">
+        {!hideEn && <p className="en-text">{group.english?.text}</p>}
+        {!hideZh && <p className="zh-text">{group.chinese?.text}</p>}
+      </div>
+      <Button
+        variant="ghost"
+        size="iconSm"
+        onClick={(e) => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(
+            `${group.english?.text || ''}\n${group.chinese?.text || ''}`
+          );
+        }}
+        title={copyTooltip}
+      >
+        <Copy size={12} className="text-muted-foreground" />
+      </Button>
+    </div>
+  );
+});
+
+SubtitleSegmentRow.displayName = 'SubtitleSegmentRow';
 
 export default function SubtitleDrawer() {
   const { t } = useT();
@@ -117,36 +171,16 @@ export default function SubtitleDrawer() {
           {groups.map((group) => {
             const isActive = activeSub?.segment_index === group.index;
             return (
-              <div
+              <SubtitleSegmentRow
                 key={group.index}
-                ref={isActive ? activeItemRef : null}
-                className={`subtitle-segment-row ${isActive ? 'is-active' : ''}`}
-                onClick={() => {
-                  const entry = group.english || group.chinese;
-                  if (entry) setSeekTime(entry.start);
-                }}
-              >
-                <span className="segment-num">
-                  {String(group.index + 1).padStart(2, '0')}
-                </span>
-                <div className="subtitle-texts">
-                  {!hideEn && <p className="en-text">{group.english?.text}</p>}
-                  {!hideZh && <p className="zh-text">{group.chinese?.text}</p>}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="iconSm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigator.clipboard.writeText(
-                      `${group.english?.text || ''}\n${group.chinese?.text || ''}`
-                    );
-                  }}
-                  title={t('copyText')}
-                >
-                  <Copy size={12} className="text-muted-foreground" />
-                </Button>
-              </div>
+                group={group}
+                isActive={isActive}
+                hideEn={hideEn}
+                hideZh={hideZh}
+                setSeekTime={setSeekTime}
+                activeRef={isActive ? activeItemRef : null}
+                copyTooltip={t('copyText')}
+              />
             );
           })}
           {groups.length === 0 && (

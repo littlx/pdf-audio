@@ -19,6 +19,9 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --shadow-card: var(--shadow-card);
+
+  --animate-slideLeft: slideLeft 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-scaleUp: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 :root {
@@ -763,6 +766,11 @@ html.dark .pane-tab-btn:hover {
   to { background-position: 20px 0; }
 }
 
+@keyframes scaleUp {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -775,19 +783,19 @@ html.dark .pane-tab-btn:hover {
   border: 1px solid currentColor;
   line-height: 1;
 }
-.status-badge.is-completed, .status-badge.completed {
+.status-badge.is-completed {
   background: rgba(16, 185, 129, 0.1);
   color: #10b981;
 }
-.status-badge.is-running, .status-badge.running, .status-badge.processing, .status-badge.pending {
+.status-badge.is-running, .status-badge.is-processing, .status-badge.is-pending {
   background: rgba(59, 130, 246, 0.1);
   color: #3b82f6;
 }
-.status-badge.is-failed, .status-badge.failed {
+.status-badge.is-failed {
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
 }
-.status-badge.is-paused, .status-badge.paused {
+.status-badge.is-paused {
   background: rgba(245, 158, 11, 0.1);
   color: #f59e0b;
 }

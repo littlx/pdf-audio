@@ -69,7 +69,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
     if (!ok) return;
     try {
       await api(`/api/pdfs/${pdf.id}`, { method: 'DELETE' });
-      toast('PDF deleted successfully', 'success');
+      toast(t('pdfDeletedSuccess'), 'success');
       await load();
     } catch (err) {
       toast(err instanceof Error ? err.message : t('deletePdfFailed'), 'error');
@@ -165,7 +165,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
                             method: 'PATCH',
                             body: JSON.stringify({ original_name: newName }),
                           });
-                          toast('Rename successful', 'success');
+                          toast(t('renameSuccess'), 'success');
                           await load();
                         }}
                       />
