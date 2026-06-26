@@ -161,19 +161,40 @@ Pause/cancel is cooperative: the worker checks control flags between major stage
 
 ## Development
 
-Backend:
+Fast one-command development startup (Redis runs in Docker):
+
+```bash
+./dev.sh
+```
+
+This starts:
+
+- Redis container `pdf-audio-dev-redis` on `localhost:6379`
+- backend API on `http://localhost:8000`
+- worker with `REDIS_URL=redis://localhost:6379/0`
+- frontend dev server on `http://localhost:5173`
+
+Default development access code is `123321`; override it with:
+
+```bash
+APP_ACCESS_TOKEN=your-code ./dev.sh
+```
+
+Stop everything with `Ctrl+C`. The script removes the Redis container on exit by default. Use `STOP_REDIS_ON_EXIT=0 ./dev.sh` to keep it running.
+
+Manual backend:
 
 ```bash
 cd backend
 pip install -r requirements.txt
-PYTHONPATH=. uvicorn app.main:app --reload
+REDIS_URL=redis://localhost:6379/0 PYTHONPATH=. uvicorn app.main:app --reload
 ```
 
 Worker:
 
 ```bash
 cd backend
-PYTHONPATH=. python -m app.workers.worker
+REDIS_URL=redis://localhost:6379/0 PYTHONPATH=. python -m app.workers.worker
 ```
 
 Frontend:
