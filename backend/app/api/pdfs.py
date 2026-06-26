@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.schemas import LastPageUpdate, OkOut, OutlineItem, PdfOut
+from app.api.schemas import LastPageUpdate, OkOut, OutlineItem, PdfOut, PdfRename
 from app.core.config import settings
 from app.core.security import require_access_token
 from app.core.utils import safe_path_under
@@ -91,5 +91,18 @@ def update_last_page(pdf_id: str, payload: LastPageUpdate, db: Session = Depends
     if not pdf:
         raise HTTPException(status_code=404, detail="PDF not found")
     pdf.last_preview_page = max(1, min(payload.page, pdf.page_count))
+    db.commit()
+    return serialize_pdf(pdf)
+
+
+@router.patch("/{pdf_id}/rename", response_model=PdfOut)
+def rename_pdf(pdf_id: str, payload: PdfRename, db: Session = Depends(get_db)):
+    pdf = db.get(PdfFile, pdf_id)
+    if not pdf:
+        raise HTTPException(status_code=404, detail="PDF not found")
+    name = payload.original_name.strip()
+    if not name.lower().endswith(".pdf"):
+        name += ".pdf"
+    pdf.original_name = name
     db.commit()
     return serialize_pdf(pdf)

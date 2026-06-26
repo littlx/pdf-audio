@@ -70,6 +70,7 @@ class AudioFile(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     task_id: Mapped[str] = mapped_column(String, ForeignKey("conversion_tasks.id", ondelete="SET NULL"), nullable=True)
+    pdf_id: Mapped[str] = mapped_column(String, ForeignKey("pdf_files.id", ondelete="SET NULL"), nullable=True)
     title: Mapped[str] = mapped_column(String, nullable=False)
     source_pdf_name: Mapped[str] = mapped_column(String, nullable=True)
     page_expression: Mapped[str] = mapped_column(String, nullable=True)
@@ -81,6 +82,8 @@ class AudioFile(Base):
     duration: Mapped[float] = mapped_column(Float, nullable=True)
     format: Mapped[str] = mapped_column(String, default="mp3")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    pdf: Mapped[PdfFile] = relationship()
 
 
 class PlaybackRecord(Base):

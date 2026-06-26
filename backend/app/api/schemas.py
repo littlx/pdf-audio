@@ -99,6 +99,7 @@ class TaskDetailOut(TaskOut):
 class AudioOut(BaseModel):
     id: str
     task_id: str | None
+    pdf_id: str | None = None
     title: str
     source_pdf_name: str | None
     page_expression: str | None
@@ -181,3 +182,13 @@ class TtsPreviewRequest(BaseModel):
     lang: Literal["english", "chinese"] = "english"
     voice: str | None = Field(default=None, max_length=128)
     text: str | None = Field(default=None, max_length=1_000)
+
+
+class PdfRename(BaseModel):
+    original_name: str = Field(min_length=1, max_length=255)
+
+
+class AudioRename(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+
+

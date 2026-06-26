@@ -4,7 +4,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.api.schemas import LastPageUpdate, SettingsUpdate, TaskCreate
+from app.api.schemas import LastPageUpdate, SettingsUpdate, TaskCreate, PdfRename, AudioRename
 from app.core.utils import safe_path_under
 
 
@@ -40,3 +40,19 @@ def test_task_create_requires_selected_text_min_length():
 def test_settings_update_validates_percent_fields():
     with pytest.raises(ValidationError):
         SettingsUpdate(english_rate="fast")
+
+
+def test_pdf_rename_validation():
+    with pytest.raises(ValidationError):
+        PdfRename(original_name="")
+    rename = PdfRename(original_name="new_name.pdf")
+    assert rename.original_name == "new_name.pdf"
+
+
+def test_audio_rename_validation():
+    with pytest.raises(ValidationError):
+        AudioRename(title="")
+    rename = AudioRename(title="New Audio Name")
+    assert rename.title == "New Audio Name"
+
+

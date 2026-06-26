@@ -10,17 +10,19 @@ from app.core.security import require_access_token
 from app.core.utils import new_id, safe_path_under
 from app.db.models import AudioFile, PlaybackRecord
 from app.db.session import get_db
-from app.api.schemas import AudioOut, OkOut, PlaybackIn, PlaybackOut
+from app.api.schemas import AudioOut, OkOut, PlaybackIn, PlaybackOut, AudioRename
 
 router = APIRouter(prefix="/api/audios", tags=["audios"], dependencies=[Depends(require_access_token)])
 
 
 def serialize_audio(audio: AudioFile) -> dict:
+    source_pdf = audio.pdf.original_name if audio.pdf else audio.source_pdf_name
     return {
         "id": audio.id,
         "task_id": audio.task_id,
+        "pdf_id": audio.pdf_id,
         "title": audio.title,
-        "source_pdf_name": audio.source_pdf_name,
+        "source_pdf_name": source_pdf,
         "page_expression": audio.page_expression,
         "audio_mode": audio.audio_mode,
         "duration": audio.duration,
@@ -124,3 +126,13 @@ def save_playback(audio_id: str, payload: PlaybackIn, db: Session = Depends(get_
     row.loop_current_segment = payload.loop_current_segment
     db.commit()
     return {"ok": True}
+
+
+@router.patch("/{audio_id}/rename", response_model=AudioOut)
+def rename_audio(audio_id: str, payload: AudioRename, db: Session = Depends(get_db)):
+    audio = db.get(AudioFile, audio_id)
+    if not audio:
+        raise HTTPException(status_code=404, detail="Audio not found")
+    audio.title = payload.title.strip()
+    db.commit()
+    return serialize_audio(audio)

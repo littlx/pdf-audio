@@ -215,6 +215,7 @@ def _ensure_audio_and_subtitles(db: Session, task: ConversionTask, clips: list[d
     audio = AudioFile(
         id=audio_id,
         task_id=task.id,
+        pdf_id=task.pdf_id,
         title=f"{task.source_pdf_name or 'Selected text'} - {task.page_expression or 'Selection'}",
         source_pdf_name=task.source_pdf_name,
         page_expression=task.page_expression,

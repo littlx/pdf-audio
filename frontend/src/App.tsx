@@ -1,93 +1,291 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, FileAudio, LayoutDashboard, Library, Lock, Plus, Settings } from 'lucide-react';
+import { BookOpen, Lock, Settings, FileText, Headphones, Wand2, ShieldAlert } from 'lucide-react';
 import AccessGate from './components/AccessGate';
-import LibraryPage from './pages/LibraryPage';
-import ConvertPage from './pages/ConvertPage';
-import PlayerPage from './pages/PlayerPage';
-import SettingsPage from './pages/SettingsPage';
-import PdfPreviewPage from './pages/PdfPreviewPage';
-import type { PdfFile, Task } from './api/types';
+import LibraryPane from './components/LibraryPane';
+import PdfReaderPane from './components/PdfReaderPane';
+import ConvertPane from './components/ConvertPane';
+import GlobalPlayer from './components/GlobalPlayer';
+import SubtitleDrawer from './components/SubtitleDrawer';
+import SettingsDrawer from './components/SettingsDrawer';
+import MediaPane from './components/MediaPane';
+import type { PdfFile, Task, AudioFile, SubtitleEntry, AppSettings } from './api/types';
 import { api, clearOfflineCaches, clearToken, getToken } from './api/client';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
-
-type Route = 'library' | 'preview' | 'convert' | 'player' | 'settings';
-type NavItem = { route: Route; label: string; icon: typeof LayoutDashboard };
-
-const routes: Route[] = ['library', 'preview', 'convert', 'player', 'settings'];
-const navItems: NavItem[] = [
-  { route: 'player', label: 'Listen', icon: LayoutDashboard },
-  { route: 'library', label: 'Library', icon: Library },
-  { route: 'convert', label: 'Convert', icon: FileAudio },
-  { route: 'settings', label: 'Settings', icon: Settings },
-];
-const routeTitles: Record<Route, string> = { player: 'Listen', library: 'Library', preview: 'Preview', convert: 'Convert', settings: 'Settings' };
-
-function parseRoute(pathname: string): Route {
-  const value = pathname.replace(/^\//, '').split('/')[0] as Route;
-  return routes.includes(value) ? value : 'library';
-}
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(Boolean(getToken()));
-  const [route, setRoute] = useState<Route>(() => parseRoute(location.pathname));
-  const [selectedPdf, setSelectedPdf] = useState<PdfFile | undefined>();
-  const [selectedText, setSelectedText] = useState<string | undefined>();
+  const [selectedPdf, setSelectedPdf] = useState<PdfFile | undefined>(undefined);
+  const [selectedText, setSelectedText] = useState('');
+  const [activeAudio, setActiveAudio] = useState<AudioFile | null>(null);
+  const [leftTab, setLeftTab] = useState<'library' | 'media' | 'reader'>('library');
   const [tasks, setTasks] = useState<Task[]>([]);
+  
+  // Settings Drawer and Theme States
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDark, setIsDark] = useState(false);
 
-  function navigate(nextRoute: Route, replace = false) {
-    const normalized = nextRoute === 'preview' && !selectedPdf ? 'library' : nextRoute;
-    setRoute(normalized);
-    const nextPath = `/${normalized}`;
-    if (location.pathname !== nextPath) replace ? history.replaceState(null, '', nextPath) : history.pushState(null, '', nextPath);
-  }
+  // Global Player States
+  const [activeSub, setActiveSub] = useState<SubtitleEntry | null>(null);
+  const [subs, setSubs] = useState<SubtitleEntry[]>([]);
+  const [isSubtitlesOpen, setIsSubtitlesOpen] = useState(false);
+  const [seekTime, setSeekTime] = useState<number | null>(null);
+  const [hideEn, setHideEn] = useState(false);
+  const [hideZh, setHideZh] = useState(false);
+  const [dictation, setDictation] = useState(false);
 
+  // Sync theme
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [isDark]);
+
+  // Load settings on unlock
   useEffect(() => {
     if (!unlocked) return;
-    const loadTasks = () => api<Task[]>('/api/tasks').then(setTasks).catch(() => undefined);
+    api<AppSettings>('/api/settings')
+      .then((data) => {
+        setIsDark(Boolean(data.dark_mode));
+      })
+      .catch(() => undefined);
+  }, [unlocked]);
+
+  // Periodically fetch global active tasks
+  useEffect(() => {
+    if (!unlocked) return;
+    const loadTasks = () =>
+      api<Task[]>('/api/tasks')
+        .then(setTasks)
+        .catch(() => undefined);
     loadTasks();
     const timer = setInterval(loadTasks, 5000);
     return () => clearInterval(timer);
   }, [unlocked]);
 
-  useEffect(() => { if (route === 'preview' && !selectedPdf) navigate('library', true); }, [route, selectedPdf]);
-  useEffect(() => { const onPopState = () => setRoute(parseRoute(location.pathname)); window.addEventListener('popstate', onPopState); return () => window.removeEventListener('popstate', onPopState); }, []);
+  // Load initial audio file
+  useEffect(() => {
+    if (!unlocked) return;
+    api<AudioFile[]>('/api/audios')
+      .then((list) => {
+        if (list && list.length > 0) {
+          setActiveAudio(list[0]);
+        }
+      })
+      .catch(() => undefined);
+  }, [unlocked]);
 
-  if (!unlocked) return <AccessGate onUnlock={() => setUnlocked(true)} />;
+  // If selectedPdf changes, sync left tab to 'reader'
+  useEffect(() => {
+    if (selectedPdf) {
+      setLeftTab('reader');
+    } else {
+      setLeftTab('library');
+    }
+  }, [selectedPdf]);
+
+  if (!unlocked) {
+    return <AccessGate onUnlock={() => setUnlocked(true)} />;
+  }
 
   const activeTasks = tasks.filter((task) => !['completed', 'canceled'].includes(task.status));
   const failedTasks = tasks.filter((task) => task.status === 'failed');
 
+  function handleSelectPdf(pdf: PdfFile) {
+    setSelectedPdf(pdf);
+  }
+
+  function handleOpenConvert(pdf: PdfFile) {
+    setSelectedPdf(pdf);
+  }
+
+  function handleSendToConvert(text: string) {
+    setSelectedText(text);
+  }
+
+  function handleConversionComplete(audio: AudioFile) {
+    // When conversion completes, load audio into player and auto-open subtitle drawer
+    setActiveAudio(audio);
+    setIsSubtitlesOpen(true);
+  }
+
+  function handleLogout() {
+    clearToken();
+    clearOfflineCaches();
+    setUnlocked(false);
+  }
+
   return (
-    <div className="app-shell compact-shell">
-      <aside className="sidebar" aria-label="Primary navigation">
-        <div className="brand-mark" aria-label="PDF Audio"><BookOpen size={19} strokeWidth={2.2} /></div>
-        <nav className="side-nav">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const selected = route === item.route || (item.route === 'library' && route === 'preview');
-            return <Button key={item.route} type="button" variant="ghost" size="sm" aria-current={selected ? 'page' : undefined} className={cn('side-nav-item', selected && 'is-active')} onClick={() => item.route === 'convert' && !selectedPdf ? navigate('library') : navigate(item.route)}><Icon size={15} /><span>{item.label}</span></Button>;
-          })}
-        </nav>
-        <Button variant="ghost" size="sm" className="side-nav-item muted-nav" onClick={() => { clearToken(); clearOfflineCaches(); setUnlocked(false); }}><Lock size={15} /><span>Lock</span></Button>
-      </aside>
-
-      <main className="workspace">
-        <header className="topbar compact-appbar">
-          <div className="topbar-title"><strong>{routeTitles[route]}</strong>{selectedPdf && <span>{selectedPdf.original_name}</span>}</div>
-          <div className="task-summary">
-            {activeTasks.length > 0 && <span className="status-badge is-running">{activeTasks.length} active</span>}
-            {failedTasks.length > 0 && <span className="status-badge is-failed">{failedTasks.length} failed</span>}
+    <div className="dashboard-container">
+      {/* Header Bar */}
+      <header className="dashboard-header">
+        <div className="brand-section">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-md">
+            <BookOpen size={18} strokeWidth={2.5} />
           </div>
-          <Button className="admin-cta" size="sm" onClick={() => navigate(selectedPdf ? 'convert' : 'library')}><Plus size={14} />{selectedPdf ? 'Convert PDF' : 'Upload PDF'}</Button>
-        </header>
+          <span className="brand-title">Bilingual PDF Audio</span>
+        </div>
 
-        {route === 'library' && <LibraryPage openPreview={(pdf) => { setSelectedPdf(pdf); navigate('preview'); }} openConvert={(pdf) => { setSelectedPdf(pdf); setSelectedText(undefined); navigate('convert'); }} />}
-        {route === 'preview' && selectedPdf && <PdfPreviewPage pdf={selectedPdf} convertSelection={(text) => { setSelectedText(text); navigate('convert'); }} />}
-        {route === 'convert' && <ConvertPage pdf={selectedPdf} selectedText={selectedText} />}
-        {route === 'player' && <PlayerPage />}
-        {route === 'settings' && <SettingsPage />}
+        {/* Global Active Task summary */}
+        {activeTasks.length > 0 || failedTasks.length > 0 ? (
+          <div className="flex items-center gap-2 px-3 py-1 bg-secondary rounded-full">
+            {activeTasks.length > 0 && (
+              <span className="flex items-center gap-1.5 text-[11px] font-bold text-blue-500">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                {activeTasks.length} converting
+              </span>
+            )}
+            {failedTasks.length > 0 && (
+              <span className="flex items-center gap-1 text-[11px] font-bold text-destructive">
+                <ShieldAlert size={12} />
+                {failedTasks.length} failed
+              </span>
+            )}
+          </div>
+        ) : null}
+
+        <div className="header-actions">
+          <Button variant="ghost" size="sm" onClick={() => setIsSettingsOpen(true)} className="flex items-center gap-1">
+            <Settings size={14} />
+            <span>Settings</span>
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="flex items-center gap-1 text-muted-foreground">
+            <Lock size={14} />
+            <span>Lock</span>
+          </Button>
+        </div>
+      </header>
+
+      {/* Workspace Grid */}
+      <main className={`dashboard-workspace ${activeAudio ? 'has-player' : ''}`}>
+        {/* Left Workspace Panel: Documents & Reader */}
+        <section className="workspace-pane">
+          <div className="pane-tabs">
+            <div className="pane-tab-list">
+              <button
+                className={`pane-tab-btn ${leftTab === 'library' ? 'is-active' : ''}`}
+                onClick={() => setLeftTab('library')}
+              >
+                <BookOpen size={13} />
+                <span>Documents</span>
+              </button>
+              <button
+                className={`pane-tab-btn ${leftTab === 'media' ? 'is-active' : ''}`}
+                onClick={() => setLeftTab('media')}
+              >
+                <Headphones size={13} />
+                <span>Media Library</span>
+              </button>
+              <button
+                className={`pane-tab-btn ${leftTab === 'reader' ? 'is-active' : ''}`}
+                onClick={() => {
+                  if (selectedPdf) setLeftTab('reader');
+                }}
+                disabled={!selectedPdf}
+                title={!selectedPdf ? 'Select a PDF first' : 'Read active PDF'}
+              >
+                <FileText size={13} />
+                <span>PDF Reader</span>
+              </button>
+            </div>
+            {selectedPdf && leftTab === 'reader' && (
+              <div className="pane-header-actions">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedPdf(undefined)}
+                  className="text-[11px] h-7 px-2"
+                >
+                  Close File
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="pane-content">
+            <div style={{ display: leftTab === 'library' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+              <LibraryPane
+                activePdfId={selectedPdf?.id}
+                onSelectPdf={handleSelectPdf}
+                onOpenConvert={handleOpenConvert}
+              />
+            </div>
+            <div style={{ display: leftTab === 'media' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+              <MediaPane
+                activeAudio={activeAudio}
+                onSelectAudio={setActiveAudio}
+              />
+            </div>
+            {selectedPdf && (
+              <div style={{ display: leftTab === 'reader' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+                <PdfReaderPane pdf={selectedPdf} onSendToConvert={handleSendToConvert} />
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Right Workspace Panel: Convert Workspace (Dedicated) */}
+        <section className="workspace-pane">
+          <div className="pane-tabs">
+            <div className="pane-tab-list">
+              <span className="pane-tab-btn is-active">
+                <Wand2 size={13} className="text-ring" />
+                <span>Convert PDF</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="pane-content">
+            <ConvertPane
+              pdf={selectedPdf}
+              initialText={selectedText}
+              onConversionComplete={handleConversionComplete}
+            />
+          </div>
+        </section>
       </main>
+
+      {/* Global Bottom Audio Player */}
+      <GlobalPlayer
+        activeAudio={activeAudio}
+        onOpenSubtitles={() => setIsSubtitlesOpen(!isSubtitlesOpen)}
+        isSubtitlesOpen={isSubtitlesOpen}
+        onSubtitlesLoaded={setSubs}
+        activeSub={activeSub}
+        setActiveSub={setActiveSub}
+        seekTime={seekTime}
+        onSeekReset={() => setSeekTime(null)}
+        hideEn={hideEn}
+        hideZh={hideZh}
+        dictation={dictation}
+        setHideEn={setHideEn}
+        setHideZh={setHideZh}
+        setDictation={setDictation}
+      />
+
+      {/* Drawer overlay for all subtitles */}
+      <SubtitleDrawer
+        isOpen={isSubtitlesOpen}
+        onClose={() => setIsSubtitlesOpen(false)}
+        subs={subs}
+        activeSub={activeSub}
+        onSeek={setSeekTime}
+        hideEn={hideEn}
+        hideZh={hideZh}
+        dictation={dictation}
+        setHideEn={setHideEn}
+        setHideZh={setHideZh}
+        setDictation={setDictation}
+      />
+
+      {/* Settings Panel */}
+      <SettingsDrawer
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onThemeChange={(dark) => setIsDark(dark)}
+      />
     </div>
   );
 }
