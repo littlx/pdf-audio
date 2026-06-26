@@ -83,8 +83,14 @@ export default function ConvertPage({ pdf, selectedText }: { pdf?: PdfFile; sele
 
   async function control(action: 'pause' | 'cancel' | 'resume' | 'retry') {
     if (!task) return;
-    await api(`/api/tasks/${task.id}/${action}`, { method: 'POST' });
-    await refresh();
+    setError('');
+    try {
+      const updated = await api<Task>(`/api/tasks/${task.id}/${action}`, { method: 'POST' });
+      setTask(updated);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} task`);
+    }
   }
 
   if (!pdf && !liveSelection) {
@@ -145,7 +151,7 @@ export default function ConvertPage({ pdf, selectedText }: { pdf?: PdfFile; sele
                   <button onClick={() => control('pause')}>Pause</button>
                   <button onClick={() => control('resume')}>Resume</button>
                   <button onClick={() => control('retry')}>Retry</button>
-                  <button className="danger" onClick={() => control('cancel')}>Cancel</button>
+                  <button className="danger" onClick={() => control('cancel')} disabled={['completed', 'failed', 'canceled'].includes(task.status)}>Cancel</button>
                   <button onClick={refresh}>Refresh</button>
                 </div>
                 

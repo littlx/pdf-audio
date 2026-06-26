@@ -84,7 +84,6 @@ def create_task(db: Session, payload: dict) -> ConversionTask:
     db.add(task)
     db.commit()
     db.refresh(task)
-    enqueue_task(task.id)
     return task
 
 

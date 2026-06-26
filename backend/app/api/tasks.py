@@ -119,7 +119,9 @@ def pause_task(task_id: str, db: Session = Depends(get_db)):
 @router.post("/{task_id}/cancel", response_model=TaskOut)
 def cancel_task(task_id: str, db: Session = Depends(get_db)):
     task = get_task_or_404(db, task_id)
-    if task.status in {"completed", "failed", "canceled"}:
+    if task.status == "canceled":
+        return serialize_task(task)
+    if task.status in {"completed", "failed"}:
         conflict("Task is already terminal")
     task.cancel_requested = True
     if task.status == "pending":
