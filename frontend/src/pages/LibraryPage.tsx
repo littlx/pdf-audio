@@ -1,22 +1,11 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Calendar, FileText, Play, Search, Sparkles, Trash2, UploadCloud, Wand2 } from 'lucide-react';
+import { Calendar, FileText, Play, Search, Trash2, UploadCloud, Wand2 } from 'lucide-react';
 import { api } from '../api/client';
 import type { PdfFile } from '../api/types';
 import { Button } from '@/components/ui/button';
 
-const coverThemes = ['coral', 'yellow', 'teal', 'slate', 'rose', 'amber'];
-
 function shortTitle(name: string) {
   return name.replace(/\.pdf$/i, '').trim();
-}
-
-function initials(name: string) {
-  return shortTitle(name)
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase())
-    .join('') || 'PDF';
 }
 
 export default function LibraryPage({ openConvert, openPreview }: { openConvert: (pdf: PdfFile) => void; openPreview: (pdf: PdfFile) => void }) {
@@ -24,6 +13,8 @@ export default function LibraryPage({ openConvert, openPreview }: { openConvert:
   const [keyword, setKeyword] = useState('');
   const [sort, setSort] = useState('uploaded_at');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [uploading, setUploading] = useState('');
 
   async function load() {
     try {
@@ -36,10 +27,20 @@ export default function LibraryPage({ openConvert, openPreview }: { openConvert:
   useEffect(() => { load(); }, [sort]);
 
   async function upload(file: File) {
+    setError('');
+    setMessage('');
+    setUploading(file.name);
     const form = new FormData();
     form.append('file', file);
-    await api('/api/pdfs', { method: 'POST', body: form });
-    await load();
+    try {
+      const uploaded = await api<PdfFile>('/api/pdfs', { method: 'POST', body: form });
+      setMessage(`Uploaded ${uploaded.original_name}.`);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to upload PDF');
+    } finally {
+      setUploading('');
+    }
   }
 
   async function remove(pdf: PdfFile) {
@@ -49,69 +50,54 @@ export default function LibraryPage({ openConvert, openPreview }: { openConvert:
   }
 
   return (
-    <section className="page library-page">
-      <div className="section-heading dashboard-heading">
-        <h2>My PDF books</h2>
-        <div className="library-controls">
-          <label className="inline-search">
-            <Search size={16} />
-            <input placeholder="Search filename" value={keyword} onChange={(e) => setKeyword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load()} />
-          </label>
-          <select value={sort} onChange={(e) => setSort(e.target.value)}>
-            <option value="uploaded_at">Upload time</option>
-            <option value="author">Author</option>
-          </select>
-          <Button size="sm" onClick={load}>Search</Button>
+    <section className="page library-page compact-page">
+      <div className="compact-toolbar">
+        <div>
+          <h2>Library</h2>
+          <p>{pdfs.length} PDFs · upload, preview, convert</p>
         </div>
+        <label className="inline-search compact-search">
+          <Search size={15} />
+          <input placeholder="Search filename" value={keyword} onChange={(e) => setKeyword(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load()} />
+        </label>
+        <select value={sort} onChange={(e) => setSort(e.target.value)}>
+          <option value="uploaded_at">Upload time</option>
+          <option value="author">Author</option>
+        </select>
+        <Button size="sm" variant="secondary" onClick={load}>Search</Button>
+        <label className="upload-button">
+          <input hidden type="file" accept="application/pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) upload(file); }} />
+          <UploadCloud size={14} /> {uploading ? 'Uploading…' : 'Upload PDF'}
+        </label>
       </div>
 
-      <label className="dropzone book-dropzone" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file) upload(file).catch((err) => setError(err.message)); }}>
-        <input hidden type="file" accept="application/pdf" onChange={(e) => { const file = e.target.files?.[0]; if (file) upload(file).catch((err) => setError(err.message)); }} />
-        <span className="dropzone-icon"><UploadCloud size={20} /></span>
-        <span>
-          <strong>Drop a PDF here or click to upload</strong>
-          <small>Max 200MB · Convert books into bilingual audio plans</small>
-        </span>
+      <label className="dropzone compact-dropzone" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const file = e.dataTransfer.files[0]; if (file) upload(file); }}>
+        Drop PDF here · max 200MB
       </label>
 
-      {error && <p className="error">{error}</p>}
+      {message && <p className="success">{message}</p>}
+      {error && <p className="error" role="alert">{error}</p>}
 
-      <div className="book-grid">
-        {pdfs.map((pdf, index) => {
-          const title = shortTitle(pdf.original_name);
-          return (
-            <div className="library-book-card" key={pdf.id}>
-              <div className={`book-cover cover-${coverThemes[index % coverThemes.length]}`}>
-                <span>{initials(pdf.original_name)}</span>
-                <BookOpen size={26} strokeWidth={2.15} />
-              </div>
-              <div className="book-info">
-                <div className="book-title-row">
-                  <h3>{title}</h3>
-                  <Button variant="ghost" size="iconSm" aria-label={`Delete ${title}`} onClick={() => remove(pdf)}><Trash2 size={15} /></Button>
-                </div>
-                <p className="muted">{pdf.author || 'Unknown author'}</p>
-                <div className="book-meta-row">
-                  <span><FileText size={13} /> {pdf.page_count} pages</span>
-                  <span><Calendar size={13} /> {new Date(pdf.uploaded_at).toLocaleDateString()}</span>
-                  <span>{(pdf.file_size / 1024 / 1024).toFixed(1)} MB</span>
-                  <span className={`status-badge is-${pdf.status.toLowerCase()}`}>{pdf.status}</span>
-                </div>
-                <div className="actions card-actions">
-                  <Button variant="secondary" size="sm" onClick={() => openPreview(pdf)}><Play size={14} /> Preview</Button>
-                  <Button size="sm" onClick={() => openConvert(pdf)}><Wand2 size={14} /> Convert</Button>
-                </div>
-              </div>
+      <div className="document-table">
+        <div className="document-row document-head">
+          <span>File</span><span>Author</span><span>Pages</span><span>Size</span><span>Uploaded</span><span>Status</span><span>Actions</span>
+        </div>
+        {pdfs.map((pdf) => (
+          <div className="document-row" key={pdf.id}>
+            <div className="doc-title"><FileText size={15} /><strong>{shortTitle(pdf.original_name)}</strong></div>
+            <span className="muted truncate">{pdf.author || 'Unknown'}</span>
+            <span>{pdf.page_count}</span>
+            <span>{(pdf.file_size / 1024 / 1024).toFixed(1)} MB</span>
+            <span className="muted"><Calendar size={12} /> {new Date(pdf.uploaded_at).toLocaleDateString()}</span>
+            <span className={`status-badge is-${pdf.status.toLowerCase()}`}>{pdf.status}</span>
+            <div className="row-actions">
+              <Button variant="secondary" size="sm" onClick={() => openPreview(pdf)}><Play size={13} /> Preview</Button>
+              <Button size="sm" onClick={() => openConvert(pdf)}><Wand2 size={13} /> Convert</Button>
+              <Button variant="ghost" size="iconSm" aria-label={`Delete ${pdf.original_name}`} onClick={() => remove(pdf)}><Trash2 size={14} /></Button>
             </div>
-          );
-        })}
-        {pdfs.length === 0 && (
-          <div className="empty-state">
-            <Sparkles size={26} />
-            <h3>No PDFs yet</h3>
-            <p>Upload a book to build your audio catalog.</p>
           </div>
-        )}
+        ))}
+        {pdfs.length === 0 && <div className="empty-state table-empty"><h3>No PDFs yet</h3><p>Upload a PDF to start converting.</p></div>}
       </div>
     </section>
   );
