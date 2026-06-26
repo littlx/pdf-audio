@@ -13,6 +13,7 @@ services:
       STORAGE_DIR: /app/storage
       REDIS_URL: redis://redis:6379/0
       WORKER_FALLBACK_TO_THREAD: "false"
+      WORKER_MODE: fork
     ports:
       - "8000:8000"
     volumes:
@@ -36,6 +37,7 @@ services:
       STORAGE_DIR: /app/storage
       REDIS_URL: redis://redis:6379/0
       WORKER_FALLBACK_TO_THREAD: "false"
+      WORKER_MODE: fork
     command: python -m app.workers.worker
     volumes:
       - ./storage:/app/storage

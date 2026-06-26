@@ -83,6 +83,7 @@ Stop/logs:
 | `STORAGE_DIR` | `./storage` | Docker uses `/app/storage`. |
 | `REDIS_URL` | `redis://redis:6379/0` | Required for worker queue in Docker. |
 | `WORKER_FALLBACK_TO_THREAD` | `true` | Development convenience. Set `false` in production so Redis failures return 503 instead of running jobs inside the web process. |
+| `WORKER_MODE` | `simple` | `simple` avoids RQ fork crashes on macOS development; Docker Compose sets `fork`. |
 | `MAX_PDF_SIZE_MB` | `200` | Upload size limit. |
 | `MAX_PROCESS_PAGES` | `10` | Conversion page limit. |
 | `CORS_ORIGINS` | local dev origins | Comma-separated explicit origins. If set to `*`, credentialed CORS is disabled. |
@@ -171,7 +172,7 @@ This starts:
 
 - Redis container `pdf-audio-dev-redis` on `localhost:6379`
 - backend API on `http://localhost:8000`
-- worker with `REDIS_URL=redis://localhost:6379/0`
+- worker with `REDIS_URL=redis://localhost:6379/0` and `WORKER_MODE=simple` to avoid macOS fork crashes
 - frontend dev server on `http://localhost:5173`
 
 Default development access code is `123321`; override it with:

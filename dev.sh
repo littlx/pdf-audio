@@ -61,6 +61,7 @@ export DATABASE_URL="sqlite:///$ROOT_DIR/storage/app.db"
 export STORAGE_DIR="$ROOT_DIR/storage"
 export REDIS_URL="redis://localhost:$REDIS_PORT/0"
 export WORKER_FALLBACK_TO_THREAD=true
+export WORKER_MODE=simple
 export CORS_ORIGINS="http://localhost:8000,http://localhost:5173"
 export PYTHONPATH="$BACKEND_DIR"
 

@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     max_process_pages: int = Field(default=10, alias="MAX_PROCESS_PAGES")
     cors_origins: str = Field(default="http://localhost:8000,http://localhost:5173", alias="CORS_ORIGINS")
     worker_fallback_to_thread: bool = Field(default=True, alias="WORKER_FALLBACK_TO_THREAD")
+    worker_mode: str = Field(default="simple", alias="WORKER_MODE")
 
     model_config = SettingsConfigDict(env_file=(PROJECT_ROOT / ".env", BACKEND_ROOT / ".env"), extra="ignore")
 
