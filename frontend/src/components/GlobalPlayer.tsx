@@ -19,6 +19,7 @@ type GlobalPlayerProps = {
   setHideEn: (val: boolean) => void;
   setHideZh: (val: boolean) => void;
   setDictation: (val: boolean) => void;
+  t: (key: any) => string;
 };
 
 export default function GlobalPlayer({
@@ -36,6 +37,7 @@ export default function GlobalPlayer({
   setHideEn,
   setHideZh,
   setDictation,
+  t,
 }: GlobalPlayerProps) {
   const [subs, setSubs] = useState<SubtitleEntry[]>([]);
   const [loop, setLoop] = useState(false);
@@ -209,9 +211,9 @@ export default function GlobalPlayer({
       const headers = { 'X-Access-Token': getToken() };
       await cache.add(new Request(activeAudio.audio_url, { headers }));
       await cache.add(new Request(activeAudio.subtitle_json_url, { headers }));
-      alert('Audio and subtitles saved for offline playback.');
+      alert(t('offlineSuccess'));
     } catch {
-      alert('Offline cache failed.');
+      alert(t('offlineFailed'));
     }
   }
 
@@ -273,14 +275,14 @@ export default function GlobalPlayer({
       {/* Dynamic Subtitle Display Row */}
       <div className="global-player-subtitle">
         {dictation ? (
-          <span className="text-xs text-muted-foreground uppercase tracking-wider font-bold">Dictation Mode Active</span>
+          <span className="text-xs text-muted-foreground uppercase tracking-wider font-bold">{t('dictationModeActive')}</span>
         ) : (
           <>
             {displayedText ? (
               <span className="text-foreground font-bold">{displayedText}</span>
             ) : (
               <span className="text-xs text-muted-foreground italic font-normal">
-                Press Play to follow subtitle transcript
+                {t('pressPlayFollow')}
               </span>
             )}
           </>
@@ -307,7 +309,7 @@ export default function GlobalPlayer({
             size="iconSm"
             className={isSubtitlesOpen ? 'bg-secondary text-ring' : 'text-muted-foreground'}
             onClick={onOpenSubtitles}
-            title="Toggle Subtitle Drawer"
+            title={t('subtitleTranscript')}
           >
             <ListMusic size={15} />
           </Button>
@@ -323,7 +325,7 @@ export default function GlobalPlayer({
             <button
               onClick={togglePlay}
               className="play-pause-btn"
-              title={isPlaying ? 'Pause' : 'Play'}
+              title={isPlaying ? t('pause') : t('play')}
             >
               {isPlaying ? <Pause size={14} fill="currentColor" /> : <Play size={14} fill="currentColor" className="ml-0.5" />}
             </button>
@@ -399,7 +401,7 @@ export default function GlobalPlayer({
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowMoreMenu(false)} />
               <div className="player-more-menu-popover z-50">
-                <span className="menu-section-title">Subtitle Display</span>
+                <span className="menu-section-title">{t('subtitleDisplay')}</span>
                 <div className="flex flex-col gap-1.5 p-1.5 bg-secondary/35 rounded-lg border border-border/50">
                   <label className="flex items-center gap-2 text-[11px] font-semibold cursor-pointer">
                     <input
@@ -408,7 +410,7 @@ export default function GlobalPlayer({
                       onChange={(e) => setHideEn(e.target.checked)}
                       className="w-3.5 h-3.5 accent-ring"
                     />
-                    <span>Hide English</span>
+                    <span>{t('hideEnglish')}</span>
                   </label>
                   <label className="flex items-center gap-2 text-[11px] font-semibold cursor-pointer">
                     <input
@@ -417,7 +419,7 @@ export default function GlobalPlayer({
                       onChange={(e) => setHideZh(e.target.checked)}
                       className="w-3.5 h-3.5 accent-ring"
                     />
-                    <span>Hide Chinese</span>
+                    <span>{t('hideChinese')}</span>
                   </label>
                   <label className="flex items-center gap-2 text-[11px] font-semibold cursor-pointer">
                     <input
@@ -426,11 +428,11 @@ export default function GlobalPlayer({
                       onChange={(e) => setDictation(e.target.checked)}
                       className="w-3.5 h-3.5 accent-ring"
                     />
-                    <span>Dictation Mode</span>
+                    <span>{t('dictationMode')}</span>
                   </label>
                 </div>
 
-                <span className="menu-section-title">Playback Speed</span>
+                <span className="menu-section-title">{t('playbackSpeed')}</span>
                 <div className="speed-select-grid">
                   {[1, 1.25, 1.5, 2].map((rate) => (
                     <button
@@ -443,7 +445,7 @@ export default function GlobalPlayer({
                   ))}
                 </div>
 
-                <span className="menu-section-title">Actions</span>
+                <span className="menu-section-title">{t('actions')}</span>
                 <button
                   className="menu-action-btn"
                   onClick={() => {
@@ -452,10 +454,10 @@ export default function GlobalPlayer({
                   }}
                 >
                   <Wifi size={14} className="text-muted-foreground" />
-                  <span>Save Offline Cache</span>
+                  <span>{t('saveOffline')}</span>
                 </button>
 
-                <span className="menu-section-title">Downloads</span>
+                <span className="menu-section-title">{t('downloads')}</span>
                 <a
                   className="menu-action-btn"
                   href={activeAudio.audio_url}
@@ -463,7 +465,7 @@ export default function GlobalPlayer({
                   onClick={() => setShowMoreMenu(false)}
                 >
                   <Download size={14} className="text-muted-foreground" />
-                  <span>Download MP3 Audio</span>
+                  <span>{t('downloadMp3Audio')}</span>
                 </a>
                 <a
                   className="menu-action-btn"
@@ -472,7 +474,7 @@ export default function GlobalPlayer({
                   onClick={() => setShowMoreMenu(false)}
                 >
                   <FileDown size={14} className="text-muted-foreground" />
-                  <span>Download VTT Subtitles</span>
+                  <span>{t('downloadVttSubtitles')}</span>
                 </a>
                 <a
                   className="menu-action-btn"
@@ -481,7 +483,7 @@ export default function GlobalPlayer({
                   onClick={() => setShowMoreMenu(false)}
                 >
                   <FileDown size={14} className="text-muted-foreground" />
-                  <span>Download SRT Subtitles</span>
+                  <span>{t('downloadSrtSubtitles')}</span>
                 </a>
               </div>
             </>

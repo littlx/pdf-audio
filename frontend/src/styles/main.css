@@ -151,10 +151,8 @@ select {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  border-bottom: 1px solid var(--border);
   background: var(--card);
   z-index: 20;
-  box-shadow: none;
 }
 
 .brand-section {
@@ -162,17 +160,49 @@ select {
   align-items: center;
   gap: 10px;
 }
+.brand-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ring);
+}
 .brand-title {
   font-family: var(--font-heading);
-  font-size: 18px;
-  font-weight: 800;
-  color: var(--primary-gradient);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.header-btn {
+  border-radius: var(--radius-control) !important;
+  padding: 0 12px !important;
+  height: 32px !important;
+  display: flex;
+  align-items: center;
+  gap: 6px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: var(--muted-foreground) !important;
+  border: 1px solid var(--border) !important;
+  background: transparent !important;
+  transition: all 0.15s ease !important;
+}
+.header-btn:hover {
+  color: var(--foreground) !important;
+  border-color: var(--ring) !important;
+  background: rgba(16, 185, 129, 0.05) !important;
+}
+.header-btn.is-lock:hover {
+  color: var(--destructive) !important;
+  border-color: var(--destructive) !important;
+  background: rgba(239, 68, 68, 0.05) !important;
 }
 
 .dashboard-workspace {
@@ -882,6 +912,11 @@ html.dark .toc-btn:hover {
   to { transform: translate(-50%, 0); opacity: 1; }
 }
 
+@keyframes popoverSlideUpFade {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
 @keyframes moveStripes {
   from { background-position: 0 0; }
   to { background-position: 20px 0; }
@@ -954,7 +989,6 @@ html.dark audio {
   right: 0;
   height: 126px;
   background: var(--card);
-  border-top: 1px solid var(--border);
   box-shadow: none;
   display: flex;
   flex-direction: column;
@@ -1059,7 +1093,7 @@ html.dark audio {
   flex-direction: column;
   gap: 8px;
   z-index: 60;
-  animation: slideUpFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: popoverSlideUpFade 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .menu-section-title {

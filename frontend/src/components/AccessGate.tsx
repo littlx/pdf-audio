@@ -1,9 +1,20 @@
 import { useState } from 'react';
-import { Lock } from 'lucide-react';
+import { Lock, Languages } from 'lucide-react';
 import { api, clearOfflineCaches, clearToken, setToken } from '../api/client';
 import { Button } from './ui/button';
+import type { Language } from '../i18n';
 
-export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
+export default function AccessGate({
+  onUnlock,
+  t,
+  lang,
+  onLanguageChange,
+}: {
+  onUnlock: () => void;
+  t: (key: any) => string;
+  lang: Language;
+  onLanguageChange: (lang: Language) => void;
+}) {
   const [token, setLocalToken] = useState('');
   const [error, setError] = useState('');
 
@@ -16,7 +27,7 @@ export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
     } catch (err) {
       clearToken();
       clearOfflineCaches();
-      setError(err instanceof Error ? err.message : 'Invalid access code');
+      setError(err instanceof Error ? err.message : t('invalidAccessCode'));
     }
   }
 
@@ -29,12 +40,12 @@ export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
         
         <div className="text-center flex flex-col gap-1">
           <h1 className="text-lg font-extrabold tracking-tight">Bilingual PDF Audio</h1>
-          <p className="text-xs text-muted-foreground">Enter access code to unlock workspace</p>
+          <p className="text-xs text-muted-foreground">{t('enterAccessCode')}</p>
         </div>
 
         <div className="flex flex-col gap-1.5 text-left w-full mt-2">
           <label htmlFor="access-code" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider text-center">
-            Access Code
+            {t('accessCode')}
           </label>
           <input
             id="access-code"
@@ -56,8 +67,33 @@ export default function AccessGate({ onUnlock }: { onUnlock: () => void }) {
         )}
         
         <Button type="submit" className="btn-primary-gradient w-full h-10 text-xs font-bold mt-2">
-          Unlock Dashboard
+          {t('unlockDashboard')}
         </Button>
+
+        {/* Small Language Switcher Toggle */}
+        <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-border w-full">
+          <Languages size={13} className="text-muted-foreground" />
+          <span className={`text-[10px] font-semibold transition-colors ${lang === 'zh' ? 'text-foreground' : 'text-muted-foreground'}`}>
+            简体中文
+          </span>
+          <button
+            type="button"
+            onClick={() => onLanguageChange(lang === 'zh' ? 'en' : 'zh')}
+            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none cursor-pointer ${
+              lang === 'en' ? 'bg-ring' : 'bg-secondary border border-border'
+            }`}
+            aria-label="Toggle Language"
+          >
+            <span
+              className={`inline-block h-2.5 w-2.5 transform rounded-full bg-foreground transition-transform duration-200 ${
+                lang === 'en' ? 'translate-x-[14.5px]' : 'translate-x-[1.5px]'
+              }`}
+            />
+          </button>
+          <span className={`text-[10px] font-semibold transition-colors ${lang === 'en' ? 'text-foreground' : 'text-muted-foreground'}`}>
+            English
+          </span>
+        </div>
       </form>
     </main>
   );

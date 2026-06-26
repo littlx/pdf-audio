@@ -26,6 +26,7 @@ type SubtitleDrawerProps = {
   setHideEn: (val: boolean) => void;
   setHideZh: (val: boolean) => void;
   setDictation: (val: boolean) => void;
+  t: (key: any) => string;
 };
 
 export default function SubtitleDrawer({
@@ -40,6 +41,7 @@ export default function SubtitleDrawer({
   setHideEn,
   setHideZh,
   setDictation,
+  t,
 }: SubtitleDrawerProps) {
   const [query, setQuery] = useState('');
   const activeItemRef = useRef<HTMLDivElement>(null);
@@ -72,7 +74,7 @@ export default function SubtitleDrawer({
       <div className="subtitle-drawer-panel" role="dialog" aria-labelledby="sub-drawer-title">
         <div className="subtitle-drawer-header">
           <h2 id="sub-drawer-title" className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            Subtitle Transcript
+            {t('subtitleTranscript')}
           </h2>
           <Button variant="ghost" size="iconSm" onClick={onClose} aria-label="Close subtitles">
             <X size={15} />
@@ -84,7 +86,7 @@ export default function SubtitleDrawer({
           <div className="search-input-wrapper">
             <Search size={14} />
             <input
-              placeholder="Search in transcripts..."
+              placeholder={t('searchTranscripts')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className="h-9 text-xs pl-8 w-full"
@@ -98,7 +100,7 @@ export default function SubtitleDrawer({
                 onChange={(e) => setHideEn(e.target.checked)}
                 className="w-3.5 h-3.5 accent-ring"
               />
-              <span>Hide EN</span>
+              <span>{t('hideEnglish')}</span>
             </label>
             <label className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground cursor-pointer uppercase">
               <input
@@ -107,7 +109,7 @@ export default function SubtitleDrawer({
                 onChange={(e) => setHideZh(e.target.checked)}
                 className="w-3.5 h-3.5 accent-ring"
               />
-              <span>Hide ZH</span>
+              <span>{t('hideChinese')}</span>
             </label>
             <label className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground cursor-pointer uppercase">
               <input
@@ -116,7 +118,7 @@ export default function SubtitleDrawer({
                 onChange={(e) => setDictation(e.target.checked)}
                 className="w-3.5 h-3.5 accent-ring"
               />
-              <span>Dictation</span>
+              <span>{t('dictationMode')}</span>
             </label>
           </div>
         </div>
@@ -151,7 +153,7 @@ export default function SubtitleDrawer({
                       `${group.english?.text || ''}\n${group.chinese?.text || ''}`
                     );
                   }}
-                  title="Copy Text"
+                  title={t('copyText')}
                 >
                   <Copy size={12} className="text-muted-foreground" />
                 </Button>
@@ -159,13 +161,13 @@ export default function SubtitleDrawer({
             );
           })}
           {groups.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-8">No matching subtitles found.</p>
+            <p className="text-xs text-muted-foreground text-center py-8">{t('noMatchingSubtitles')}</p>
           )}
         </div>
 
         <div className="subtitle-drawer-footer">
-          <span>{groups.length} sentences</span>
-          <span>Click any line to seek player</span>
+          <span>{groups.length} {t('sentences')}</span>
+          <span>{t('clickSeek')}</span>
         </div>
       </div>
     </>

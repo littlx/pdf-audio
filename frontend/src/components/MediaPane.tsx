@@ -7,9 +7,10 @@ import { Button } from './ui/button';
 type MediaPaneProps = {
   activeAudio: AudioFile | null;
   onSelectAudio: (audio: AudioFile) => void;
+  t: (key: any) => string;
 };
 
-export default function MediaPane({ activeAudio, onSelectAudio }: MediaPaneProps) {
+export default function MediaPane({ activeAudio, onSelectAudio, t }: MediaPaneProps) {
   const [audios, setAudios] = useState<AudioFile[]>([]);
   const [error, setError] = useState('');
   const [editingAudioId, setEditingAudioId] = useState<string | null>(null);
@@ -20,7 +21,7 @@ export default function MediaPane({ activeAudio, onSelectAudio }: MediaPaneProps
     try {
       setAudios(await api('/api/audios'));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load audios');
+      setError(err instanceof Error ? err.message : t('noAudioFound'));
     }
   }
 
@@ -44,12 +45,12 @@ export default function MediaPane({ activeAudio, onSelectAudio }: MediaPaneProps
 
   async function remove(audio: AudioFile, e: React.MouseEvent) {
     e.stopPropagation();
-    if (!confirm(`Delete generated audio "${audio.title}"?`)) return;
+    if (!confirm(t('deleteConfirmAudio'))) return;
     try {
       await api(`/api/audios/${audio.id}`, { method: 'DELETE' });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete audio');
+      setError(err instanceof Error ? err.message : t('deleteAudioFailed'));
     }
   }
 
@@ -76,7 +77,7 @@ export default function MediaPane({ activeAudio, onSelectAudio }: MediaPaneProps
       setEditingAudioId(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rename audio');
+      setError(err instanceof Error ? err.message : t('renameAudioFailed'));
     }
   }
 
@@ -85,6 +86,13 @@ export default function MediaPane({ activeAudio, onSelectAudio }: MediaPaneProps
     const m = Math.floor(secs / 60);
     const s = Math.floor(secs % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  function translateAudioMode(mode: string) {
+    if (mode === 'bilingual') return t('bilingual');
+    if (mode === 'english') return t('englishOnly');
+    if (mode === 'chinese') return t('chineseOnly');
+    return mode;
   }
 
   return (
@@ -140,11 +148,11 @@ export default function MediaPane({ activeAudio, onSelectAudio }: MediaPaneProps
                       )}
                       {audio.page_expression && (
                         <>
-                          <span>Pages: {audio.page_expression}</span>
+                          <span>{t('pageRange')}: {audio.page_expression}</span>
                           <span>·</span>
                         </>
                       )}
-                      <span className="capitalize">{audio.audio_mode}</span>
+                      <span>{translateAudioMode(audio.audio_mode)}</span>
                       <span>·</span>
                       <span className="inline-flex items-center gap-1">
                         <Clock size={10} />
@@ -183,12 +191,12 @@ export default function MediaPane({ activeAudio, onSelectAudio }: MediaPaneProps
                     {isCurrentPlaying ? (
                       <>
                         <Pause size={12} fill="currentColor" />
-                        <span>Pause</span>
+                        <span>{t('pause')}</span>
                       </>
                     ) : (
                       <>
                         <Play size={12} fill="currentColor" />
-                        <span>Play</span>
+                        <span>{t('play')}</span>
                       </>
                     )}
                   </Button>
@@ -208,8 +216,8 @@ export default function MediaPane({ activeAudio, onSelectAudio }: MediaPaneProps
           {audios.length === 0 && (
             <div className="empty-state p-8 text-center text-muted-foreground">
               <Headphones size={32} className="mx-auto opacity-40 mb-2" />
-              <h3 className="font-bold text-sm">No generated audios</h3>
-              <p className="text-xs">Go to "Convert PDF" tab to generate audio from your PDF files.</p>
+              <h3 className="font-bold text-sm">{t('noAudioFound')}</h3>
+              <p className="text-xs">{t('noAudioHint')}</p>
             </div>
           )}
         </div>

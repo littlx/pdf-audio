@@ -23,13 +23,25 @@ const defaultSettings: AppSettings = {
   dark_mode: false,
 };
 
+import type { Language } from '../i18n';
+
 type SettingsDrawerProps = {
   isOpen: boolean;
   onClose: () => void;
   onThemeChange?: (isDark: boolean) => void;
+  lang: Language;
+  onLanguageChange: (lang: Language) => void;
+  t: (key: any) => string;
 };
 
-export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: SettingsDrawerProps) {
+export default function SettingsDrawer({
+  isOpen,
+  onClose,
+  onThemeChange,
+  lang,
+  onLanguageChange,
+  t,
+}: SettingsDrawerProps) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [voices, setVoices] = useState<TtsVoice[]>([]);
@@ -89,7 +101,7 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
       });
       setSettings({ ...defaultSettings, ...saved });
       setApiKeyInput('');
-      setMessage('Saved successfully.');
+      setMessage(t('settingsSaved'));
       if (onThemeChange) {
         onThemeChange(saved.dark_mode);
       }
@@ -104,7 +116,7 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
     setMessage('');
     try {
       await api('/api/settings/clear-cache', { method: 'POST' });
-      setMessage('Cache cleared successfully.');
+      setMessage(t('cacheCleared'));
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to clear cache');
@@ -145,9 +157,9 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
       <div className="drawer-panel" role="dialog" aria-labelledby="drawer-title">
         <div className="drawer-header">
           <h2 id="drawer-title" className="text-base font-bold flex items-center gap-2">
-            Preferences
+            {t('preferences')}
           </h2>
-          <Button variant="ghost" size="iconSm" onClick={onClose} aria-label="Close settings">
+          <Button variant="ghost" size="iconSm" onClick={onClose} aria-label={t('close')}>
             <X size={16} />
           </Button>
         </div>
@@ -159,11 +171,11 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
           {/* AI Settings */}
           <div className="settings-group-card">
             <div className="settings-group-title">
-              <Cpu size={14} /> AI Settings
+              <Cpu size={14} /> {t('aiSettings')}
             </div>
             <div className="flex flex-col gap-3">
               <div className="form-group">
-                <label>API Base URL</label>
+                <label>{t('apiBaseUrl')}</label>
                 <input
                   value={settings.ai_base_url}
                   onChange={(e) => set('ai_base_url', e.target.value)}
@@ -171,16 +183,16 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
                 />
               </div>
               <div className="form-group">
-                <label>API Key</label>
+                <label>{t('apiKey')}</label>
                 <input
                   type="password"
                   value={apiKeyInput}
-                  placeholder={settings.ai_api_key_masked || 'Leave blank to keep existing key'}
+                  placeholder={settings.ai_api_key_masked || t('leaveBlankToKeepKey')}
                   onChange={(e) => setApiKeyInput(e.target.value)}
                 />
               </div>
               <div className="form-group">
-                <label>Model Name</label>
+                <label>{t('modelName')}</label>
                 <input
                   value={settings.ai_model}
                   onChange={(e) => set('ai_model', e.target.value)}
@@ -189,26 +201,26 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="form-group">
-                  <label>Bilingual Format</label>
+                  <label>{t('format')}</label>
                   <select
                     value={settings.default_bilingual_format}
                     onChange={(e) => set('default_bilingual_format', e.target.value as AppSettings['default_bilingual_format'])}
                   >
-                    <option value="sentence_pair">Sentence pair</option>
-                    <option value="paragraph_pair">Paragraph pair</option>
+                    <option value="sentence_pair">{t('sentencePair')}</option>
+                    <option value="paragraph_pair">{t('paragraphPair')}</option>
                   </select>
                 </div>
                 <div className="form-group">
-                  <label>Translation Style</label>
+                  <label>{t('translationStyle')}</label>
                   <select
                     value={settings.default_output_style}
                     onChange={(e) => set('default_output_style', e.target.value as AppSettings['default_output_style'])}
                   >
-                    <option value="faithful">Faithful</option>
-                    <option value="plain_explanation">Plain explanation</option>
-                    <option value="child_friendly">Child-friendly</option>
-                    <option value="exam_english">Exam English</option>
-                    <option value="business_english">Business English</option>
+                    <option value="faithful">{t('faithful')}</option>
+                    <option value="plain_explanation">{t('plainExplanation')}</option>
+                    <option value="child_friendly">{t('childFriendly')}</option>
+                    <option value="exam_english">{t('examEnglish')}</option>
+                    <option value="business_english">{t('businessEnglish')}</option>
                   </select>
                 </div>
               </div>
@@ -218,11 +230,11 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
           {/* TTS Settings */}
           <div className="settings-group-card">
             <div className="settings-group-title">
-              <Volume2 size={14} /> TTS Settings
+              <Volume2 size={14} /> {t('ttsSettings')}
             </div>
             <div className="flex flex-col gap-3">
               <div className="form-group">
-                <label>English Voice</label>
+                <label>{t('englishVoice')}</label>
                 <select
                   value={settings.english_voice}
                   onChange={(e) => set('english_voice', e.target.value)}
@@ -236,7 +248,7 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
                 </select>
               </div>
               <div className="form-group">
-                <label>Chinese Voice</label>
+                <label>{t('chineseVoice')}</label>
                 <select
                   value={settings.chinese_voice}
                   onChange={(e) => set('chinese_voice', e.target.value)}
@@ -252,29 +264,29 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="form-group">
-                  <label>English Rate</label>
+                  <label>{t('englishRate')}</label>
                   <input value={settings.english_rate} onChange={(e) => set('english_rate', e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label>Chinese Rate</label>
+                  <label>{t('chineseRate')}</label>
                   <input value={settings.chinese_rate} onChange={(e) => set('chinese_rate', e.target.value)} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="form-group">
-                  <label>English Volume</label>
+                  <label>{t('englishVolume')}</label>
                   <input value={settings.english_volume} onChange={(e) => set('english_volume', e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label>Chinese Volume</label>
+                  <label>{t('chineseVolume')}</label>
                   <input value={settings.chinese_volume} onChange={(e) => set('chinese_volume', e.target.value)} />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div className="form-group">
-                  <label>Lang Pause (ms)</label>
+                  <label>{t('langPause')}</label>
                   <input
                     type="number"
                     value={settings.pause_between_languages_ms}
@@ -282,7 +294,7 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
                   />
                 </div>
                 <div className="form-group">
-                  <label>Segment Pause (ms)</label>
+                  <label>{t('segmentPause')}</label>
                   <input
                     type="number"
                     value={settings.pause_between_segments_ms}
@@ -293,10 +305,10 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
 
               <div className="flex gap-2 mt-1">
                 <Button variant="secondary" size="sm" className="flex-1" onClick={() => preview('english')}>
-                  Test English Voice
+                  {t('testEnglish')}
                 </Button>
                 <Button variant="secondary" size="sm" className="flex-1" onClick={() => preview('chinese')}>
-                  Test Chinese Voice
+                  {t('testChinese')}
                 </Button>
               </div>
             </div>
@@ -305,12 +317,41 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
           {/* Theme & Cache Settings */}
           <div className="settings-group-card">
             <div className="settings-group-title">
-              <Palette size={14} /> Theme & Cache
+              <Palette size={14} /> {t('themeCache')}
             </div>
             <div className="flex flex-col gap-3">
+              {/* Language Switcher Switch */}
               <div className="flex items-center justify-between">
                 <label className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
-                  Enable Dark Mode
+                  {t('language')}
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-semibold transition-colors ${lang === 'zh' ? 'text-foreground' : 'text-muted-foreground'}`}>
+                    简体中文
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onLanguageChange(lang === 'zh' ? 'en' : 'zh')}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none cursor-pointer ${
+                      lang === 'en' ? 'bg-ring' : 'bg-secondary border border-border'
+                    }`}
+                    aria-label="Toggle Language"
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-foreground transition-transform duration-200 ${
+                        lang === 'en' ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                      }`}
+                    />
+                  </button>
+                  <span className={`text-[11px] font-semibold transition-colors ${lang === 'en' ? 'text-foreground' : 'text-muted-foreground'}`}>
+                    English
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">
+                  {t('enableDark')}
                 </label>
                 <input
                   type="checkbox"
@@ -321,19 +362,19 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
               </div>
 
               <div className="form-group">
-                <label>Subtitle Font Size</label>
+                <label>{t('subFontSize')}</label>
                 <select
                   value={settings.subtitle_font_size}
                   onChange={(e) => set('subtitle_font_size', e.target.value as AppSettings['subtitle_font_size'])}
                 >
-                  <option value="small">Small</option>
-                  <option value="medium">Medium</option>
-                  <option value="large">Large</option>
+                  <option value="small">{lang === 'zh' ? '小' : 'Small'}</option>
+                  <option value="medium">{lang === 'zh' ? '中' : 'Medium'}</option>
+                  <option value="large">{lang === 'zh' ? '大' : 'Large'}</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label>Subtitle Accent Color</label>
+                <label>{t('subAccentColor')}</label>
                 <input
                   value={settings.subtitle_color}
                   onChange={(e) => set('subtitle_color', e.target.value)}
@@ -343,10 +384,10 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
 
               <div className="mt-1">
                 <label className="font-semibold text-xs text-muted-foreground uppercase tracking-wider block mb-1">
-                  Server Cache
+                  {t('serverCache')}
                 </label>
                 <Button variant="secondary" size="sm" className="w-full" onClick={clearCache}>
-                  Clear server generated audios & text caches
+                  {t('clearCacheBtn')}
                 </Button>
               </div>
             </div>
@@ -355,10 +396,10 @@ export default function SettingsDrawer({ isOpen, onClose, onThemeChange }: Setti
 
         <div className="drawer-footer">
           <Button variant="ghost" size="sm" onClick={onClose}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button size="sm" className="btn-primary-gradient" onClick={save}>
-            <Save size={14} /> Save Preferences
+            <Save size={14} /> {t('saveSettings')}
           </Button>
         </div>
       </div>

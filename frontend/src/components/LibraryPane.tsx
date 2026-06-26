@@ -12,9 +12,10 @@ type LibraryPaneProps = {
   onSelectPdf: (pdf: PdfFile) => void;
   onOpenConvert: (pdf: PdfFile) => void;
   activePdfId?: string;
+  t: (key: any) => string;
 };
 
-export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }: LibraryPaneProps) {
+export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId, t }: LibraryPaneProps) {
   const [pdfs, setPdfs] = useState<PdfFile[]>([]);
   const [keyword, setKeyword] = useState('');
   const [sort, setSort] = useState('uploaded_at');
@@ -28,7 +29,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
     try {
       setPdfs(await api(`/api/pdfs?keyword=${encodeURIComponent(keyword)}&sort=${sort}`));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load PDFs');
+      setError(err instanceof Error ? err.message : t('deletePdfFailed'));
     }
   }
 
@@ -44,12 +45,12 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
     form.append('file', file);
     try {
       const uploaded = await api<PdfFile>('/api/pdfs', { method: 'POST', body: form });
-      setMessage(`Uploaded ${uploaded.original_name}.`);
+      setMessage(`${t('uploadPdf')}: ${uploaded.original_name}.`);
       await load();
       // Automatically select the uploaded PDF
       onSelectPdf(uploaded);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to upload PDF');
+      setError(err instanceof Error ? err.message : t('renamePdfFailed'));
     } finally {
       setUploading('');
     }
@@ -57,12 +58,12 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
 
   async function remove(pdf: PdfFile, e: React.MouseEvent) {
     e.stopPropagation(); // Prevent opening the PDF
-    if (!confirm(`Delete PDF "${pdf.original_name}"? Generated audios will be kept.`)) return;
+    if (!confirm(t('deleteConfirmPdf'))) return;
     try {
       await api(`/api/pdfs/${pdf.id}`, { method: 'DELETE' });
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete PDF');
+      setError(err instanceof Error ? err.message : t('deletePdfFailed'));
     }
   }
 
@@ -90,7 +91,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
       setEditingPdfId(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rename PDF');
+      setError(err instanceof Error ? err.message : t('renamePdfFailed'));
     }
   }
 
@@ -101,18 +102,19 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
         <div className="search-input-wrapper">
           <Search size={14} />
           <input
-            placeholder="Search filenames..."
+            placeholder={t('searchInLibrary')}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && load()}
           />
         </div>
         <select value={sort} onChange={(e) => setSort(e.target.value)}>
-          <option value="uploaded_at">Upload time</option>
-          <option value="author">Author</option>
+          <option value="uploaded_at">{t('uploadDate')}</option>
+          <option value="file_size">{t('fileSize')}</option>
+          <option value="original_name">{t('name')}</option>
         </select>
         <Button size="sm" variant="secondary" onClick={load}>
-          Search
+          {t('searchInLibrary').replace('...', '')}
         </Button>
       </div>
 
@@ -136,8 +138,8 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
           }}
         />
         <UploadCloud size={24} className="text-muted-foreground" />
-        <span className="text-xs font-semibold text-muted-foreground">
-          {uploading ? `Uploading ${uploading}…` : 'Drag and drop PDF here, or click to upload (up to 200MB)'}
+        <span className="text-xs font-semibold text-muted-foreground text-center px-4">
+          {uploading ? `${t('uploadPdf')} ${uploading}…` : t('dragDropPdf')}
         </span>
       </label>
 
@@ -182,7 +184,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
                       </span>
                     )}
                     <div className="pdf-meta-row">
-                      <span>{pdf.page_count} pages</span>
+                      <span>{pdf.page_count} {t('pages')}</span>
                       <span>·</span>
                       <span>{(pdf.file_size / 1024 / 1024).toFixed(1)} MB</span>
                       <span>·</span>
@@ -220,7 +222,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
                     onClick={() => onOpenConvert(pdf)}
                   >
                     <Wand2 size={12} />
-                    <span>Convert</span>
+                    <span>{t('convertPdf')}</span>
                   </Button>
                   <Button
                     variant="ghost"
@@ -238,8 +240,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
           {pdfs.length === 0 && (
             <div className="empty-state p-8 text-center text-muted-foreground">
               <FileText size={32} className="mx-auto opacity-40 mb-2" />
-              <h3 className="font-bold text-sm">No PDFs available</h3>
-              <p className="text-xs">Upload a PDF file using the dropzone or upload button above.</p>
+              <h3 className="font-bold text-sm">{t('noPdfFound')}</h3>
             </div>
           )}
         </div>

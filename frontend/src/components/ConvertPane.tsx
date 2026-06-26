@@ -15,6 +15,7 @@ type ConvertPaneProps = {
   pdf?: PdfFile;
   initialText?: string;
   onConversionComplete?: (audio: AudioFile) => void;
+  t: (key: any) => string;
 };
 
 function canPause(status: string) {
@@ -30,7 +31,7 @@ function canRetry(status: string) {
   return ['failed', 'paused', 'canceled'].includes(status);
 }
 
-export default function ConvertPane({ pdf, initialText = '', onConversionComplete }: ConvertPaneProps) {
+export default function ConvertPane({ pdf, initialText = '', onConversionComplete, t }: ConvertPaneProps) {
   const [pageExpression, setPageExpression] = useState('1');
   const [format, setFormat] = useState<AppSettings['default_bilingual_format']>(defaultSettings.default_bilingual_format);
   const [style, setStyle] = useState<AppSettings['default_output_style']>(defaultSettings.default_output_style);
@@ -84,10 +85,10 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     setCompletedAudio(null);
     notifiedTaskId.current = null;
     if (mode === 'pages' && !pdf) {
-      return setError('Please select a PDF file in the library first.');
+      return setError(t('uploadFirstError'));
     }
     if (mode === 'text' && textToConvert.trim().length < 20) {
-      return setError('Text must be at least 20 characters.');
+      return setError(t('textLengthError'));
     }
 
     const payload = mode === 'text'
@@ -98,7 +99,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       const created = await api<Task>('/api/tasks', { method: 'POST', body: JSON.stringify(payload) });
       setTask(created);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create task');
+      setError(err instanceof Error ? err.message : t('createTaskFailed'));
     }
   }
 
@@ -181,7 +182,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       });
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save text and regenerate');
+      setError(err instanceof Error ? err.message : t('saveTextFailed'));
     }
   }
 
@@ -204,7 +205,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       });
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${action} task`);
+      setError(err instanceof Error ? err.message : `${t('controlFailed')}: ${action}`);
     }
   }
 
@@ -216,16 +217,16 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
           <FileText size={16} className="text-ring flex-shrink-0" />
           <div className="flex flex-col min-w-0">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-              Selected Target
+              {t('selectedTarget')}
             </span>
             <span className="text-xs font-semibold truncate">
-              {pdf ? pdf.original_name : 'No file selected (Pasted text only)'}
+              {pdf ? pdf.original_name : t('noFileSelected')}
             </span>
           </div>
         </div>
         {pdf && (
           <span className="text-[11px] font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded">
-            {pdf.page_count} pages
+            {pdf.page_count} {t('pagesCount')}
           </span>
         )}
       </div>
@@ -236,13 +237,13 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
           className={`convert-mode-btn text-xs ${mode === 'pages' ? 'is-active' : ''}`}
           onClick={() => setMode('pages')}
         >
-          Page Range
+          {t('pageRange')}
         </button>
         <button
           className={`convert-mode-btn text-xs ${mode === 'text' ? 'is-active' : ''}`}
           onClick={() => setMode('text')}
         >
-          Selected / Pasted Text
+          {t('selectedPastedText')}
         </button>
       </div>
 
@@ -250,17 +251,17 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       <div className="convert-form-card">
         {mode === 'pages' ? (
           <div className="form-group">
-            <label htmlFor="pages-input">Page Expression</label>
+            <label htmlFor="pages-input">{t('pageExpression')}</label>
             <input
               id="pages-input"
               value={pageExpression}
               onChange={(e) => setPageExpression(e.target.value)}
-              placeholder="e.g. 1-3, 5, 8-10"
+              placeholder={t('pageExpressionPlaceholder')}
             />
           </div>
         ) : (
           <div className="form-group">
-            <label htmlFor="raw-text-input">Text to Convert</label>
+            <label htmlFor="raw-text-input">{t('textToConvert')}</label>
             <textarea
               id="raw-text-input"
               value={textToConvert}
@@ -269,54 +270,54 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 setEditableText(e.target.value);
               }}
               rows={4}
-              placeholder="Paste English text here (minimum 20 characters)..."
+              placeholder={t('pasteTextPlaceholder')}
               className="text-xs"
             />
             <span className="text-[10px] font-bold text-muted-foreground text-right block mt-1">
-              {textToConvert.trim().length} chars (minimum 20)
+              {textToConvert.trim().length} {t('chars')} ({t('textMinLength')})
             </span>
           </div>
         )}
 
         <div className="grid grid-cols-3 gap-2">
           <div className="form-group">
-            <label htmlFor="format-select">Format</label>
+            <label htmlFor="format-select">{t('format')}</label>
             <select
               id="format-select"
               value={format}
               onChange={(e) => setFormat(e.target.value as AppSettings['default_bilingual_format'])}
               className="text-xs"
             >
-              <option value="sentence_pair">Sentence pair</option>
-              <option value="paragraph_pair">Paragraph pair</option>
+              <option value="sentence_pair">{t('sentencePair')}</option>
+              <option value="paragraph_pair">{t('paragraphPair')}</option>
             </select>
           </div>
           <div className="form-group">
-            <label htmlFor="style-select">Style</label>
+            <label htmlFor="style-select">{t('style')}</label>
             <select
               id="style-select"
               value={style}
               onChange={(e) => setStyle(e.target.value as AppSettings['default_output_style'])}
               className="text-xs"
             >
-              <option value="faithful">Faithful</option>
-              <option value="plain_explanation">Plain explanation</option>
-              <option value="child_friendly">Child-friendly</option>
-              <option value="exam_english">Exam English</option>
-              <option value="business_english">Business English</option>
+              <option value="faithful">{t('faithful')}</option>
+              <option value="plain_explanation">{t('plainExplanation')}</option>
+              <option value="child_friendly">{t('childFriendly')}</option>
+              <option value="exam_english">{t('examEnglish')}</option>
+              <option value="business_english">{t('businessEnglish')}</option>
             </select>
           </div>
           <div className="form-group">
-            <label htmlFor="audio-mode-select">Audio Mode</label>
+            <label htmlFor="audio-mode-select">{t('audioMode')}</label>
             <select
               id="audio-mode-select"
               value={audioMode}
               onChange={(e) => setAudioMode(e.target.value)}
               className="text-xs"
             >
-              <option value="bilingual">Bilingual</option>
-              <option value="english">English only</option>
-              <option value="chinese">Chinese only</option>
+              <option value="bilingual">{t('bilingual')}</option>
+              <option value="english">{t('englishOnly')}</option>
+              <option value="chinese">{t('chineseOnly')}</option>
             </select>
           </div>
         </div>
@@ -326,7 +327,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
           disabled={(mode === 'pages' && !pdf) || (mode === 'text' && textToConvert.trim().length < 20)}
           className="btn-primary-gradient h-10 text-xs mt-2"
         >
-          Start Generating Audio
+          {t('startGenerating')}
         </Button>
       </div>
 
@@ -338,7 +339,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
           <div className="task-progress-header">
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                Current Task
+                {t('currentTask')}
               </span>
               <span className="text-xs font-bold flex items-center gap-1.5">
                 <span className={`status-badge is-${task.status}`}>{task.status}</span>
@@ -363,29 +364,29 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             {canPause(task.status) && (
               <Button variant="secondary" size="sm" onClick={() => control('pause')} className="flex items-center gap-1 flex-1 text-[11px]">
                 <Pause size={12} />
-                <span>Pause</span>
+                <span>{t('pause')}</span>
               </Button>
             )}
             {canResume(task.status) && (
               <Button variant="secondary" size="sm" onClick={() => control('resume')} className="flex items-center gap-1 flex-1 text-[11px]">
                 <Play size={12} />
-                <span>Resume</span>
+                <span>{t('resume')}</span>
               </Button>
             )}
             {canRetry(task.status) && (
               <Button variant="secondary" size="sm" onClick={() => control('retry')} className="flex items-center gap-1 flex-1 text-[11px]">
                 <RotateCcw size={12} />
-                <span>Retry</span>
+                <span>{t('retry')}</span>
               </Button>
             )}
             {canCancel(task.status) && (
               <Button variant="destructive" size="sm" onClick={() => control('cancel')} className="flex items-center gap-1 text-[11px] hover:bg-destructive/90">
                 <XCircle size={12} />
-                <span>Cancel</span>
+                <span>{t('cancel')}</span>
               </Button>
             )}
             
-            <Button variant="ghost" size="iconSm" onClick={refresh} title="Refresh Status">
+            <Button variant="ghost" size="iconSm" onClick={refresh} title={t('refreshStatus')}>
               <RefreshCw size={14} className="text-muted-foreground" />
             </Button>
           </div>
@@ -397,10 +398,10 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         <div className="p-4 border border-border rounded-xl flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <FileText size={12} /> Extracted Text (Editable)
+              <FileText size={12} /> {t('extractedText')}
             </span>
             <span className="text-[10px] text-muted-foreground font-medium">
-              Review and correct OCR or alignment issues
+              {t('extractedTextHint')}
             </span>
           </div>
           <textarea
@@ -410,7 +411,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             className="text-xs"
           />
           <Button variant="secondary" size="sm" onClick={saveText} className="text-xs h-8">
-            Save Changes & Regenerate Audio
+            {t('saveAndRegenerate')}
           </Button>
         </div>
       )}
@@ -420,11 +421,11 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         <div className="p-3 bg-accent/30 border border-ring/30 rounded-xl flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CheckCircle2 size={16} className="text-ring" />
-            <span className="text-xs font-semibold text-accent-foreground">Audio file is ready!</span>
+            <span className="text-xs font-semibold text-accent-foreground">{t('audioReady')}</span>
           </div>
           <Button size="sm" asChild className="btn-primary-gradient text-[11px] h-8">
             <a href={completedAudio.audio_url} target="_blank" rel="noreferrer noopener">
-              Download MP3
+              {t('downloadMp3')}
             </a>
           </Button>
         </div>
@@ -438,7 +439,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             onClick={() => setShowSegments(!showSegments)}
           >
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-              Bilingual Segment Preview ({task.segments.length})
+              {t('bilingualSegmentPreview')} ({task.segments.length})
             </span>
             {showSegments ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
           </button>

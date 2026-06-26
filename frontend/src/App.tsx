@@ -11,8 +11,23 @@ import MediaPane from './components/MediaPane';
 import type { PdfFile, Task, AudioFile, SubtitleEntry, AppSettings } from './api/types';
 import { api, clearOfflineCaches, clearToken, getToken } from './api/client';
 import { Button } from '@/components/ui/button';
+import { translations } from './i18n';
+import type { Language } from './i18n';
 
 export default function App() {
+  const [lang, setLang] = useState<Language>(() => {
+    return (localStorage.getItem('app-language') as Language) || 'zh';
+  });
+
+  const t = (key: keyof typeof translations['zh']) => {
+    return translations[lang][key] || translations['en'][key] || key;
+  };
+
+  const handleLanguageChange = (newLang: Language) => {
+    setLang(newLang);
+    localStorage.setItem('app-language', newLang);
+  };
+
   const [unlocked, setUnlocked] = useState(Boolean(getToken()));
   const [selectedPdf, setSelectedPdf] = useState<PdfFile | undefined>(undefined);
   const [selectedText, setSelectedText] = useState('');
@@ -87,7 +102,14 @@ export default function App() {
   }, [selectedPdf]);
 
   if (!unlocked) {
-    return <AccessGate onUnlock={() => setUnlocked(true)} />;
+    return (
+      <AccessGate
+        onUnlock={() => setUnlocked(true)}
+        t={t}
+        lang={lang}
+        onLanguageChange={handleLanguageChange}
+      />
+    );
   }
 
   const activeTasks = tasks.filter((task) => !['completed', 'canceled'].includes(task.status));
@@ -122,38 +144,20 @@ export default function App() {
       {/* Header Bar */}
       <header className="dashboard-header">
         <div className="brand-section">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center shadow-md">
-            <BookOpen size={18} strokeWidth={2.5} />
+          <div className="brand-logo">
+            <BookOpen size={16} strokeWidth={2.5} />
           </div>
           <span className="brand-title">Bilingual PDF Audio</span>
         </div>
 
-        {/* Global Active Task summary */}
-        {activeTasks.length > 0 || failedTasks.length > 0 ? (
-          <div className="flex items-center gap-2 px-3 py-1 bg-secondary rounded-full">
-            {activeTasks.length > 0 && (
-              <span className="flex items-center gap-1.5 text-[11px] font-bold text-blue-500">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
-                {activeTasks.length} converting
-              </span>
-            )}
-            {failedTasks.length > 0 && (
-              <span className="flex items-center gap-1 text-[11px] font-bold text-destructive">
-                <ShieldAlert size={12} />
-                {failedTasks.length} failed
-              </span>
-            )}
-          </div>
-        ) : null}
-
         <div className="header-actions">
-          <Button variant="ghost" size="sm" onClick={() => setIsSettingsOpen(true)} className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={() => setIsSettingsOpen(true)} className="header-btn">
             <Settings size={14} />
-            <span>Settings</span>
+            <span>{t('settings')}</span>
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleLogout} className="flex items-center gap-1 text-muted-foreground">
+          <Button variant="ghost" size="sm" onClick={handleLogout} className="header-btn is-lock">
             <Lock size={14} />
-            <span>Lock</span>
+            <span>{t('lock')}</span>
           </Button>
         </div>
       </header>
@@ -169,14 +173,14 @@ export default function App() {
                 onClick={() => setLeftTab('library')}
               >
                 <BookOpen size={13} />
-                <span>Documents</span>
+                <span>{t('documents')}</span>
               </button>
               <button
                 className={`pane-tab-btn ${leftTab === 'media' ? 'is-active' : ''}`}
                 onClick={() => setLeftTab('media')}
               >
                 <Headphones size={13} />
-                <span>Media Library</span>
+                <span>{t('mediaLibrary')}</span>
               </button>
               <button
                 className={`pane-tab-btn ${leftTab === 'reader' ? 'is-active' : ''}`}
@@ -184,10 +188,10 @@ export default function App() {
                   if (selectedPdf) setLeftTab('reader');
                 }}
                 disabled={!selectedPdf}
-                title={!selectedPdf ? 'Select a PDF first' : 'Read active PDF'}
+                title={!selectedPdf ? t('uploadFirstError') : t('pdfReader')}
               >
                 <FileText size={13} />
-                <span>PDF Reader</span>
+                <span>{t('pdfReader')}</span>
               </button>
             </div>
             {selectedPdf && leftTab === 'reader' && (
@@ -198,7 +202,7 @@ export default function App() {
                   onClick={() => setSelectedPdf(undefined)}
                   className="text-[11px] h-7 px-2"
                 >
-                  Close File
+                  {t('closeFile')}
                 </Button>
               </div>
             )}
@@ -210,12 +214,14 @@ export default function App() {
                 activePdfId={selectedPdf?.id}
                 onSelectPdf={handleSelectPdf}
                 onOpenConvert={handleOpenConvert}
+                t={t}
               />
             </div>
             <div style={{ display: leftTab === 'media' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
               <MediaPane
                 activeAudio={activeAudio}
                 onSelectAudio={setActiveAudio}
+                t={t}
               />
             </div>
             {selectedPdf && (
@@ -232,7 +238,7 @@ export default function App() {
             <div className="pane-tab-list">
               <span className="pane-tab-btn is-active">
                 <Wand2 size={13} className="text-ring" />
-                <span>Convert PDF</span>
+                <span>{t('convertPdf')}</span>
               </span>
             </div>
           </div>
@@ -242,6 +248,7 @@ export default function App() {
               pdf={selectedPdf}
               initialText={selectedText}
               onConversionComplete={handleConversionComplete}
+              t={t}
             />
           </div>
         </section>
@@ -263,6 +270,7 @@ export default function App() {
         setHideEn={setHideEn}
         setHideZh={setHideZh}
         setDictation={setDictation}
+        t={t}
       />
 
       {/* Drawer overlay for all subtitles */}
@@ -278,6 +286,7 @@ export default function App() {
         setHideEn={setHideEn}
         setHideZh={setHideZh}
         setDictation={setDictation}
+        t={t}
       />
 
       {/* Settings Panel */}
@@ -285,6 +294,9 @@ export default function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onThemeChange={(dark) => setIsDark(dark)}
+        lang={lang}
+        onLanguageChange={handleLanguageChange}
+        t={t}
       />
     </div>
   );
