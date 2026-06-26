@@ -441,10 +441,18 @@ html.dark .pane-tab-btn:hover {
 .pdf-meta-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   color: var(--muted-foreground);
   font-size: 11px;
   margin-top: 2px;
+}
+.pdf-meta-row > span {
+  flex-shrink: 0;
+}
+.pdf-meta-row > .pdf-source-name {
+  flex-shrink: 1;
+  min-width: 0;
 }
 
 .pdf-card-actions {

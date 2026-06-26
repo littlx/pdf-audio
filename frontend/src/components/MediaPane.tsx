@@ -85,9 +85,9 @@ export default function MediaPane() {
                     <div className="pdf-meta-row">
                       {audio.source_pdf_name && (
                         <>
-                          <span className="inline-flex items-center gap-1">
-                            <FileText size={10} />
-                            {audio.source_pdf_name.replace(/\.pdf$/i, '')}
+                          <span className="inline-flex items-center gap-1 pdf-source-name min-w-0 max-w-[150px] sm:max-w-[260px] md:max-w-[360px]">
+                            <FileText size={10} className="flex-shrink-0" />
+                            <span className="truncate">{audio.source_pdf_name.replace(/\.pdf$/i, '')}</span>
                           </span>
                           <span>·</span>
                         </>
