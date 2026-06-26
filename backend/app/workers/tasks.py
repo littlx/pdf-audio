@@ -28,8 +28,9 @@ def queue() -> Queue:
 
 
 def enqueue_task(task_id: str) -> None:
+    job_id = f"task_{task_id}"
     try:
-        queue().enqueue("app.workers.tasks.run_conversion_task", task_id, job_id=f"task:{task_id}", job_timeout="2h")
+        queue().enqueue("app.workers.tasks.run_conversion_task", task_id, job_id=job_id, job_timeout="2h")
         logger.info("Enqueued conversion task %s", task_id)
     except Exception as exc:
         if "already exists" in str(exc).lower():
