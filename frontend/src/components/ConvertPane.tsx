@@ -219,20 +219,58 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       }
     }
     
-    const newText = textToConvert.substring(0, start) + merged + textToConvert.substring(end);
-    setTextToConvert(newText);
-    setEditableText(newText);
     
+    // Focus first
+    textarea.focus();
+    
+    let success = false;
+    try {
+      // Use document.execCommand('insertText') to preserve native browser undo/redo history (Ctrl+Z / Cmd+Z)
+      success = document.execCommand('insertText', false, merged);
+    } catch (e) {
+      console.warn('execCommand insertText failed, falling back to state replacement:', e);
+    }
+
+    if (!success) {
+      const newText = textToConvert.substring(0, start) + merged + textToConvert.substring(end);
+      setTextToConvert(newText);
+      setEditableText(newText);
+    }
+
     toast(
-      lang === 'zh' ? `已成功将所选的 ${lines.length} 行合并为 1 行。` : `Successfully merged ${lines.length} lines into 1.`,
+      lang === 'zh' 
+        ? `已成功将所选的 ${lines.length} 行合并为 1 行（支持 Cmd/Ctrl+Z 撤销）。` 
+        : `Successfully merged ${lines.length} lines into 1 (supports Cmd/Ctrl+Z to undo).`,
       'success'
     );
-    
-    // Focus back and select the merged text
+
+    // Re-select the merged text so the user can easily see or merge again
     setTimeout(() => {
       textarea.focus();
       textarea.setSelectionRange(start, start + merged.length);
     }, 50);
+  };
+
+  // Listen to Escape key globally to close fullscreen editor
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullscreenEditorOpen) {
+        setIsFullscreenEditorOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isFullscreenEditorOpen]);
+
+  const handleEditorKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>, isFullscreen: boolean) => {
+    // Cmd+Enter (Mac) or Ctrl+Enter (Windows) to save and submit immediately
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (isFullscreen) {
+        setIsFullscreenEditorOpen(false);
+      }
+      createTask();
+    }
   };
 
   const steps = lang === 'zh' ? [
@@ -574,6 +612,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
               placeholder={t('pasteTextPlaceholder')}
               className="w-full font-sans text-xs leading-relaxed p-3 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
               style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+              onKeyDown={(e) => handleEditorKeyDown(e, false)}
             />
             
             <div className="flex justify-between items-center text-[10px] text-muted-foreground font-medium mt-0.5">
@@ -884,6 +923,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 placeholder={t('pasteTextPlaceholder')}
                 className="w-full h-full flex-1 font-sans text-sm leading-relaxed p-4 border border-border/80 rounded-lg bg-card focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none overflow-y-auto"
                 style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+                onKeyDown={(e) => handleEditorKeyDown(e, true)}
               />
             </div>
 
