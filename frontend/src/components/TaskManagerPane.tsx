@@ -112,15 +112,17 @@ export default function TaskManagerPane() {
 
       {/* Task List Grid */}
       <div className="flex-1 overflow-y-auto pr-1">
-        <div className="pdf-list-grid">
+        <div className="task-card-list">
           {loading && tasks.length === 0 ? (
             Array.from({ length: 4 }).map((_, idx) => (
-              <div key={idx} className="pdf-card animate-pulse border border-border/50">
-                <div className="pdf-card-info flex-1">
-                  <div className="w-8 h-8 rounded bg-secondary flex-shrink-0" />
-                  <div className="flex-1 flex flex-col gap-2 pl-3">
-                    <div className="h-4 bg-secondary rounded w-2/3" />
-                    <div className="h-3 bg-secondary rounded w-1/2" />
+              <div key={idx} className="task-card animate-pulse">
+                <div className="task-card-header">
+                  <div className="task-card-meta flex-1">
+                    <div className="task-card-icon-wrapper bg-secondary" />
+                    <div className="flex-1 flex flex-col gap-2 pl-1">
+                      <div className="h-4 bg-secondary rounded w-2/3" />
+                      <div className="h-3 bg-secondary rounded w-1/2" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -134,23 +136,19 @@ export default function TaskManagerPane() {
               return (
                 <div
                   key={task.id}
-                  className={`pdf-card flex flex-col items-stretch gap-3 p-3.5 border-b border-border/40 ${
-                    task.status === 'failed' ? 'border-l-2 border-l-destructive/55' : 
-                    task.status === 'running' ? 'border-l-2 border-l-ring/55' : 
-                    task.status === 'paused' ? 'border-l-2 border-l-amber-500/55' : ''
-                  }`}
+                  className={`task-card status-${task.status}`}
                 >
-                  {/* Row 1: Icon, Title and Status */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="pdf-card-icon w-8 h-8 rounded bg-secondary flex items-center justify-center shrink-0 text-muted-foreground">
-                        {task.input_type === 'page_range' ? <FileText size={15} /> : <Wand2 size={15} />}
+                  {/* Row 1: Header */}
+                  <div className="task-card-header">
+                    <div className="task-card-meta">
+                      <div className="task-card-icon-wrapper">
+                        {task.input_type === 'page_range' ? <FileText size={16} /> : <Wand2 size={16} />}
                       </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="pdf-title font-semibold text-xs truncate" title={task.source_pdf_name || '粘贴文本转换'}>
+                      <div className="task-card-info">
+                        <span className="task-card-title" title={task.source_pdf_name || '粘贴文本转换'}>
                           {task.input_type === 'page_range' ? task.source_pdf_name : '粘贴文本转换'}
                         </span>
-                        <div className="pdf-meta-row text-[10px] text-muted-foreground mt-0.5">
+                        <div className="task-card-subtitle">
                           <span>{task.input_type === 'page_range' ? `${t('pageRange')}: ${task.page_expression}` : t('selectedPastedText')}</span>
                           <span>·</span>
                           <span className="capitalize">{task.audio_mode === 'bilingual' ? t('bilingual') : task.audio_mode === 'english' ? t('englishOnly') : t('chineseOnly')}</span>
@@ -158,7 +156,7 @@ export default function TaskManagerPane() {
                       </div>
                     </div>
 
-                    <div className="flex flex-col items-end shrink-0 gap-1">
+                    <div className="task-card-status-info">
                       <span className={`status-badge is-${task.status} text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase`}>
                         {task.status}
                       </span>
@@ -168,10 +166,10 @@ export default function TaskManagerPane() {
                     </div>
                   </div>
 
-                  {/* Row 2: Progress bar (if not completed/failed/canceled) */}
+                  {/* Row 2: Progress bar */}
                   {['running', 'pending', 'paused', 'canceling'].includes(task.status) && (
-                    <div className="flex flex-col gap-1.5 mt-0.5">
-                      <div className="flex justify-between items-center text-[10px] font-bold">
+                    <div className="task-card-progress-wrapper">
+                      <div className="task-card-progress-text">
                         <span className="text-muted-foreground">{t('progress') || '进度'}</span>
                         <span className="text-ring">{task.progress}%</span>
                       </div>
@@ -188,13 +186,13 @@ export default function TaskManagerPane() {
 
                   {/* Error Message */}
                   {task.error_message && (
-                    <div className="p-2 bg-destructive/10 text-destructive text-[11px] font-medium rounded border border-destructive/20 leading-normal">
+                    <div className="p-2.5 bg-destructive/10 text-destructive text-[11px] font-medium rounded border border-destructive/20 leading-normal">
                       {task.error_message}
                     </div>
                   )}
 
                   {/* Row 3: Action Buttons */}
-                  <div className="flex items-center justify-end gap-1.5 mt-1 border-t border-border/30 pt-2">
+                  <div className="task-card-actions">
                     {/* Running / Pending -> Pause, Cancel */}
                     {['pending', 'running'].includes(task.status) && (
                       <>

@@ -1312,9 +1312,131 @@ audio {
   margin-top: 1px;
 }
 
+
+/* Task Card styling (素雅 & Modern) */
+.task-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px;
+}
+
+.task-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.task-card:hover {
+  border-color: var(--ring);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.04);
+}
+
+/* Status left-border accents */
+.task-card.status-running {
+  border-left: 3px solid var(--ring);
+}
+.task-card.status-paused {
+  border-left: 3px solid #f59e0b;
+}
+.task-card.status-failed {
+  border-left: 3px solid var(--destructive);
+}
+.task-card.status-completed {
+  border-left: 3px solid var(--muted-foreground);
+}
+
+.task-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.task-card-meta {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.task-card-icon-wrapper {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.task-card-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.task-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.task-card-subtitle {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+
+.task-card-status-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.task-card-progress-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-card-progress-text {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.task-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
 @keyframes pulseDot {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.08); opacity: 0.95; }
 }
-
-
