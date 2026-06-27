@@ -184,8 +184,7 @@ export default function TaskManagerPane() {
                   {['running', 'pending', 'paused', 'canceling'].includes(task.status) && (
                     <div className="task-card-progress-wrapper">
                       <div className="task-card-progress-text">
-                        <span className="text-muted-foreground">{t('progress') || '进度'}</span>
-                        <span className="text-ring">{task.progress}%</span>
+                        <span className="text-ring ml-auto">{task.progress}%</span>
                       </div>
                       <div className="progress-bar-container h-1.5 rounded-full overflow-hidden bg-secondary">
                         <div 

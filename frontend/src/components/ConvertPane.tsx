@@ -417,34 +417,45 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             <div className="progress-bar-fill" style={{ width: `${task.progress}%` }} />
           </div>
 
-          {/* Task Stepper Timeline */}
-          <div className="task-timeline">
-            {steps.map((step, idx) => {
-              const isCompleted = stepIndex > idx;
-              const isActive = stepIndex === idx && task.status === 'running';
-              const isFailed = stepIndex === idx && task.status === 'failed';
-              const isPaused = stepIndex === idx && task.status === 'paused';
-              const isCanceled = stepIndex === idx && task.status === 'canceled';
+          {/* Task Stepper Roadmap */}
+          <div className="task-roadmap-container">
+            <div className="task-roadmap-track">
+              {steps.map((step, idx) => {
+                const isCompleted = stepIndex > idx;
+                const isActive = stepIndex === idx && task.status === 'running';
+                const isFailed = stepIndex === idx && task.status === 'failed';
+                const isPaused = stepIndex === idx && task.status === 'paused';
+                const isCanceled = stepIndex === idx && task.status === 'canceled';
 
-              let itemClass = '';
-              if (isCompleted) itemClass = 'is-completed';
-              else if (isActive) itemClass = 'is-active';
-              else if (isFailed) itemClass = 'is-failed';
-              else if (isPaused) itemClass = 'is-paused';
-              else if (isCanceled) itemClass = 'is-canceled';
+                let dotClass = 'is-pending';
+                if (isCompleted) dotClass = 'is-completed';
+                else if (isActive) dotClass = 'is-active';
+                else if (isFailed) dotClass = 'is-failed';
+                else if (isPaused) dotClass = 'is-paused';
+                else if (isCanceled) dotClass = 'is-canceled';
 
-              return (
-                <div key={idx} className={`task-timeline-item ${itemClass}`}>
-                  <div className="task-timeline-dot">
-                    {isCompleted ? '✓' : idx + 1}
+                return (
+                  <div key={idx} className="task-roadmap-node-wrapper">
+                    {idx > 0 && (
+                      <div className={`task-roadmap-line ${stepIndex >= idx ? 'is-active' : ''}`} />
+                    )}
+                    <div className={`task-roadmap-node ${dotClass}`} title={step.label}>
+                      {isCompleted ? '✓' : idx + 1}
+                    </div>
                   </div>
-                  <div className="task-timeline-content">
-                    <span className="task-timeline-title">{step.label}</span>
-                    <span className="task-timeline-desc">{step.desc}</span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            {stepIndex < steps.length && (
+              <div className="task-roadmap-active-step">
+                <span className="task-roadmap-active-title">
+                  {steps[Math.min(stepIndex, steps.length - 1)].label}
+                </span>
+                <span className="task-roadmap-active-desc">
+                  {steps[Math.min(stepIndex, steps.length - 1)].desc}
+                </span>
+              </div>
+            )}
           </div>
 
           {task.error_message && (

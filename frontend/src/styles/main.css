@@ -1432,3 +1432,113 @@ audio {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.08); opacity: 0.95; }
 }
+
+/* Horizontal Task Roadmap */
+.task-roadmap-container {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.task-roadmap-track {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 4px 0;
+}
+
+.task-roadmap-node-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.task-roadmap-node-wrapper:not(:first-child) {
+  flex: 1;
+}
+
+.task-roadmap-line {
+  flex: 1;
+  height: 2px;
+  background: var(--border);
+  margin: 0 4px;
+  transition: background 0.3s ease;
+}
+
+.task-roadmap-line.is-active {
+  background: var(--ring);
+}
+
+.task-roadmap-node {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+  transition: all 0.25s ease;
+  z-index: 1;
+  cursor: default;
+}
+
+.task-roadmap-node.is-completed {
+  background: var(--accent);
+  border-color: var(--ring);
+  color: var(--ring);
+}
+
+.task-roadmap-node.is-active {
+  background: var(--ring);
+  border-color: var(--ring);
+  color: var(--card);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  animation: pulseDot 2.0s infinite ease-in-out;
+}
+
+.task-roadmap-node.is-failed {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--destructive);
+  color: var(--destructive);
+}
+
+.task-roadmap-node.is-paused {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.task-roadmap-node.is-canceled {
+  background: var(--secondary);
+  border-color: var(--border);
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+
+.task-roadmap-active-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.task-roadmap-active-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.task-roadmap-active-desc {
+  font-size: 9.5px;
+  color: var(--muted-foreground);
+  margin-top: 1px;
+}
