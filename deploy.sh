@@ -20,9 +20,12 @@ info "Starting native deployment compilation..."
 info "Building frontend React/Vite assets..."
 cd "$FRONTEND_DIR"
 
-if [ ! -d "node_modules" ]; then
-    info "Installing frontend dependencies..."
+if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.last_install" ]; then
+    info "Dependencies changed or node_modules missing. Running npm install..."
     npm install
+    touch "node_modules/.last_install"
+else
+    info "Frontend dependencies are up to date. Skipping npm install."
 fi
 
 info "Compiling production bundle..."
@@ -45,9 +48,14 @@ if [ ! -d ".venv" ]; then
     python3 -m venv .venv
 fi
 
-info "Installing backend dependencies..."
-.venv/bin/pip install --upgrade pip
-.venv/bin/pip install -r requirements.txt
+if [ ! -f ".venv/.last_install" ] || [ "requirements.txt" -nt ".venv/.last_install" ]; then
+    info "Dependencies changed or venv uninitialized. Running pip install..."
+    .venv/bin/pip install --upgrade pip
+    .venv/bin/pip install -r requirements.txt
+    touch ".venv/.last_install"
+else
+    info "Backend dependencies are up to date. Skipping pip install."
+fi
 
 # 4. Initialize Database & Run Migrations
 info "Initializing database and applying migrations..."
