@@ -186,8 +186,42 @@ async def _ensure_clips(db: Session, task: ConversionTask, segments: list[Biling
     done = {item["key"]: item for item in manifest if Path(item["path"]).exists()}
     cfg = get_settings(db)
     tmp = ensure_dir(task_dir(task.id) / "clips")
+    
+    # Self-healing check: scan the physical folder to recover any clips that exist on disk
+    # but were not yet saved to the database manifest (e.g. due to a crash).
+    for file_path in tmp.glob("*.mp3"):
+        key = file_path.stem
+        if key not in done:
+            try:
+                parts = key.split("_")
+                if len(parts) == 2:
+                    segment_index = int(parts[0])
+                    lang = parts[1]
+                    seg = next((s for s in segments if s.segment_index == segment_index), None)
+                    text = ""
+                    if seg:
+                        text = seg.english if lang == "english" else seg.chinese
+                    
+                    duration = ffprobe_duration(file_path)
+                    done[key] = {
+                        "key": key,
+                        "segment_index": segment_index,
+                        "lang": lang,
+                        "text": text,
+                        "path": str(file_path),
+                        "duration": duration
+                    }
+                    logger.info("Self-healing recovered clip %s from disk", key)
+            except Exception as e:
+                logger.warning("Failed to recover clip metadata for %s: %s", key, e)
+
     items = _clip_items(segments, task.audio_mode)
     total = max(len(items), 1)
+    
+    # Instantly report correct progress of already completed clips on start/resume!
+    initial_progress = STAGE_PROGRESS[TaskStage.GENERATING_TTS_CLIPS] + int(len(done) / total * 25)
+    update_task(db, task, "running", TaskStage.GENERATING_TTS_CLIPS, initial_progress)
+
     try:
         for idx, (segment_index, lang, text) in enumerate(items, start=1):
             control()

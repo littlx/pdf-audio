@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+import re
 from sqlalchemy.orm import Session
 import asyncio
 import json
@@ -126,9 +127,17 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
     ]
     extracted_text = get_artifact(db, task.id, "edited_text") or get_artifact(db, task.id, "extracted_text")
     
+    # Scan task clips folder for completed clips
+    completed_clips = []
+    clips_dir = Path(settings.storage_dir) / "tasks" / task.id / "clips"
+    if clips_dir.exists():
+        for file in clips_dir.glob("*.mp3"):
+            completed_clips.append(file.stem) # e.g. "0001_english"
+            
     data = TaskOut.model_validate(task).model_dump()
     data["segments"] = segments
     data["extracted_text"] = extracted_text
+    data["completed_clips"] = completed_clips
     return data
 
 
@@ -320,3 +329,17 @@ def delete_task(task_id: str, db: Session = Depends(get_db)):
     db.delete(task)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/{task_id}/clips/{clip_key}")
+def get_task_clip(task_id: str, clip_key: str, db: Session = Depends(get_db)):
+    task = get_task_or_404(db, task_id)
+    # Check bounds of clip_key to prevent directory traversal
+    if not re.match(r"^\d{4}_(english|chinese)$", clip_key):
+        raise HTTPException(status_code=400, detail="Invalid clip key")
+        
+    clip_path = Path(settings.storage_dir) / "tasks" / task.id / "clips" / f"{clip_key}.mp3"
+    if not clip_path.exists():
+        raise HTTPException(status_code=404, detail="Clip not found")
+        
+    return FileResponse(clip_path, media_type="audio/mpeg")

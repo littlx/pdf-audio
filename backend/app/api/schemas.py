@@ -116,6 +116,7 @@ class TaskSegmentOut(BaseModel):
 class TaskDetailOut(TaskOut):
     segments: list[TaskSegmentOut] = []
     extracted_text: str | None = None
+    completed_clips: list[str] = []
 
 
 class AudioOut(BaseModel):
