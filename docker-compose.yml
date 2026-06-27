@@ -15,7 +15,7 @@ services:
       WORKER_FALLBACK_TO_THREAD: "false"
       WORKER_MODE: fork
     ports:
-      - "8000:8000"
+      - "8543:8543"
     volumes:
       - ./storage:/app/storage
     depends_on:

@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     max_pdf_size_mb: int = Field(default=200, alias="MAX_PDF_SIZE_MB")
     max_process_pages: int = Field(default=10, alias="MAX_PROCESS_PAGES")
-    cors_origins: str = Field(default="http://localhost:8000,http://localhost:5173", alias="CORS_ORIGINS")
+    cors_origins: str = Field(default="http://localhost:8543,http://localhost:5173", alias="CORS_ORIGINS")
     worker_fallback_to_thread: bool = Field(default=True, alias="WORKER_FALLBACK_TO_THREAD")
     worker_mode: str = Field(default="simple", alias="WORKER_MODE")
     ai_api_key: str | None = Field(default=None, alias="AI_API_KEY")

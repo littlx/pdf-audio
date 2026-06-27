@@ -62,15 +62,15 @@ export STORAGE_DIR="$ROOT_DIR/storage"
 export REDIS_URL="redis://localhost:$REDIS_PORT/0"
 export WORKER_FALLBACK_TO_THREAD=true
 export WORKER_MODE=simple
-export CORS_ORIGINS="http://localhost:8000,http://localhost:5173"
+export CORS_ORIGINS="http://localhost:8543,http://localhost:5173"
 export PYTHONPATH="$BACKEND_DIR"
 
 mkdir -p "$ROOT_DIR/storage"
 
-echo "Starting backend API on http://localhost:8000"
+echo "Starting backend API on http://localhost:8543"
 (
   cd "$BACKEND_DIR"
-  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+  uvicorn app.main:app --reload --host 0.0.0.0 --port 8543
 ) &
 BACKEND_PID=$!
 
@@ -92,7 +92,7 @@ cat <<EOF
 
 Development stack is starting:
   Frontend: http://localhost:5173
-  Backend:  http://localhost:8000
+  Backend:  http://localhost:8543
   Redis:    docker container $REDIS_CONTAINER on localhost:$REDIS_PORT
   Access code: $ACCESS_TOKEN
 
