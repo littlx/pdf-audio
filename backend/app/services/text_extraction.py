@@ -55,47 +55,91 @@ def _is_noise(line: str) -> bool:
 
 
 def _clean_text(text: str) -> str:
-    # 1. Handle hyphenated word wraps at line ends
-    text = re.sub(r"(\w+)-\n\s*(\w+)", r"\1\2", text)
+    lines = [line.strip() for line in text.splitlines() if not _is_noise(line)]
+    if not lines:
+        return ""
+        
+    # Calculate average line length of WRAPPED lines (lines that do not end with sentence-ending punctuation)
+    wrapped_lengths = []
+    for l in lines:
+        if len(l) <= 10:
+            continue
+        # If it doesn't end with a period, question mark, exclamation, or quotes
+        if not re.search(r"[.!?。！？\u201d\"]$", l):
+            wrapped_lengths.append(len(l))
+            
+    avg_len = sum(wrapped_lengths) / len(wrapped_lengths) if wrapped_lengths else 40
+    # A line is considered "short" if it's less than avg_len - 4
+    short_line_threshold = max(20, int(avg_len - 4))
     
-    # 2. Split by double newlines to process paragraphs separately
-    paragraphs = text.split("\n\n")
-    cleaned_paragraphs = []
+    paragraphs = []
+    current_para = []
     
-    for para in paragraphs:
-        # Filter noise lines first
-        lines = [line.strip() for line in para.splitlines() if not _is_noise(line)]
-        if not lines:
+    for idx, line in enumerate(lines):
+        if not line:
+            if current_para:
+                paragraphs.append(current_para)
+                current_para = []
             continue
             
+        # Check if the current line starts a list item or table row
+        is_list_start = False
+        if re.match(r"^([-\*•▪◦●■→⏩➢▶▲\u2022\u25e6\u25aa\u25fe])", line):
+            is_list_start = True
+        elif re.match(r"^(\d+[\s\.\)])", line):
+            is_list_start = True
+        elif re.match(r"^([a-zA-Z][\.\)]\s)", line):
+            is_list_start = True
+            
+        if is_list_start and current_para:
+            paragraphs.append(current_para)
+            current_para = []
+            
+        current_para.append(line)
+        
+        # Check if this line is a paragraph break
+        ends_with_punctuation = re.search(r"[.!?。！？\u201d\"]$", line)
+        is_short = len(line) < short_line_threshold
+        
+        if ends_with_punctuation and is_short:
+            paragraphs.append(current_para)
+            current_para = []
+            
+    if current_para:
+        paragraphs.append(current_para)
+        
+    # Now merge each paragraph's lines
+    merged_paragraphs = []
+    for para_lines in paragraphs:
         merged_para = ""
-        for line in lines:
+        for line in para_lines:
             if not merged_para:
                 merged_para = line
             else:
                 last_char = merged_para[-1]
                 first_char = line[0]
                 
-                # Check for drop cap merging:
-                # If the previous line is a single uppercase letter, and the current line starts with an uppercase letter,
-                # merge them WITHOUT a space (e.g., 'W' + 'HEN' -> 'WHEN').
+                # Check for drop cap merging
                 is_drop_cap = len(merged_para) == 1 and merged_para.isupper() and first_char.isupper()
-                
-                # Check if either character is Chinese
                 is_chinese = (
                     ('\u4e00' <= last_char <= '\u9fa5') or 
                     ('\u4e00' <= first_char <= '\u9fa5')
                 )
+                
                 if is_drop_cap:
                     merged_para += line
                 elif is_chinese:
                     merged_para += line
                 else:
-                    merged_para += " " + line
+                    # Hyphenated word wrap at line end
+                    if merged_para.endswith("-"):
+                        merged_para = merged_para[:-1] + line
+                    else:
+                        merged_para += " " + line
         if merged_para:
-            cleaned_paragraphs.append(merged_para)
+            merged_paragraphs.append(merged_para)
             
-    joined = "\n\n".join(cleaned_paragraphs)
+    joined = "\n\n".join(merged_paragraphs)
     joined = re.sub(r"[ \t]+", " ", joined)
     joined = re.sub(r"\n{3,}", "\n\n", joined)
     return joined.strip()

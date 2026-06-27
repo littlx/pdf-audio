@@ -17,6 +17,7 @@ type ConvertPaneProps = {
   pdf?: PdfFile;
   initialText?: string;
   onConversionComplete?: (audio: AudioFile) => void;
+  onTaskCreated?: (task: Task) => void;
   onJumpToPdfPage?: (pageNum: number) => void;
 };
 
@@ -67,7 +68,7 @@ const mergeTask = (prev: Task | null, incoming: Task): Task => {
   };
 };
 
-export default function ConvertPane({ pdf, initialText = '', onConversionComplete, onJumpToPdfPage }: ConvertPaneProps) {
+export default function ConvertPane({ pdf, initialText = '', onConversionComplete, onTaskCreated, onJumpToPdfPage }: ConvertPaneProps) {
   const { t, lang } = useT();
   const { toast } = useToast();
 
@@ -124,6 +125,27 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   const [isFullscreenEditorOpen, setIsFullscreenEditorOpen] = useState(false);
   const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
+  // Reset PDF-scoped state when target PDF changes. App also keys this component,
+  // but this keeps the pane safe if it is reused elsewhere without a key.
+  useEffect(() => {
+    setPageExpression('1');
+    setTask(null);
+    setCompletedAudio(null);
+    setError('');
+    setShowSegments(false);
+    setCustomTitle('');
+    setOriginalExtractedText('');
+    setIsFullscreenEditorOpen(false);
+    setDraftStatus('idle');
+    setIsExtracting(false);
+    notifiedTaskId.current = null;
+
+    const nextText = initialText || '';
+    setTextToConvert(nextText);
+    setEditableText(nextText);
+    setMode(nextText ? 'text' : 'pages');
+  }, [pdf?.id]);
+
   // Debounced Auto-save to localStorage
   useEffect(() => {
     if (mode === 'text' && pdf && textToConvert && textToConvert !== originalExtractedText) {
@@ -138,17 +160,18 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
 
   // Load draft from localStorage on document/page change
   useEffect(() => {
-    if (mode === 'text' && pdf) {
-      const savedDraft = localStorage.getItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`);
-      if (savedDraft) {
-        setTextToConvert(savedDraft);
-        setEditableText(savedDraft);
-        setDraftStatus('saved');
-        toast(
-          lang === 'zh' ? '已自动载入未保存的本地草稿。' : 'Auto-loaded uncommitted local draft.',
-          'success'
-        );
-      }
+    if (mode !== 'text' || !pdf) return;
+    const savedDraft = localStorage.getItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`);
+    if (savedDraft) {
+      setTextToConvert(savedDraft);
+      setEditableText(savedDraft);
+      setDraftStatus('saved');
+      toast(
+        lang === 'zh' ? '已自动载入未保存的本地草稿。' : 'Auto-loaded uncommitted local draft.',
+        'success'
+      );
+    } else if (!initialText && !originalExtractedText) {
+      setDraftStatus('idle');
     }
   }, [pdf?.id, pageExpression, mode]);
 
@@ -276,35 +299,95 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
     
     // Apply smart formatting algorithm
-    // 1. Handle hyphenated word wraps
-    let processed = textToFormat.replace(/(\w+)-\r?\n\s*(\w+)/g, '$1$2');
+    // 1. Split into individual trimmed lines
+    const rawLines = textToFormat.split(/\r?\n/).map(line => line.trim());
+    if (rawLines.length === 0) return;
     
-    // 2. Split by double newlines (paragraphs)
-    const paragraphs = processed.split(/\n\s*\n/);
-    const cleanedParagraphs = paragraphs.map(para => {
-      const lines = para.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-      if (lines.length === 0) return '';
+    // 2. Calculate average line length of WRAPPED lines (lines that do not end with sentence-ending punctuation)
+    const wrappedLengths: number[] = [];
+    const sentenceTerminatorRegex = /[.!?。！？”"]$/;
+    
+    for (const line of rawLines) {
+      if (line.length <= 10) continue;
+      if (!sentenceTerminatorRegex.test(line)) {
+        wrappedLengths.push(line.length);
+      }
+    }
+    
+    const avgLen = wrappedLengths.length > 0 
+      ? wrappedLengths.reduce((a, b) => a + b, 0) / wrappedLengths.length 
+      : 40;
       
+    const shortLineThreshold = Math.max(20, Math.floor(avgLen - 4));
+    
+    // 3. Segment lines into paragraphs based on blank lines OR (short line + sentence terminator)
+    const paragraphs: string[][] = [];
+    let currentPara: string[] = [];
+    
+    for (const line of rawLines) {
+      if (!line) {
+        if (currentPara.length > 0) {
+          paragraphs.push(currentPara);
+          currentPara = [];
+        }
+        continue;
+      }
+      
+      // Check if the current line starts a list item or table row
+      let isListStart = false;
+      if (/^([-\*•▪◦●■→⏩➢▶▲\u2022\u25e6\u25aa\u25fe])/.test(line)) {
+        isListStart = true;
+      } else if (/^(\d+[\s\.\)])/.test(line)) {
+        isListStart = true;
+      } else if (/^([a-zA-Z][\.\)]\s)/.test(line)) {
+        isListStart = true;
+      }
+      
+      if (isListStart && currentPara.length > 0) {
+        paragraphs.push(currentPara);
+        currentPara = [];
+      }
+      
+      currentPara.push(line);
+      
+      const endsWithPunctuation = sentenceTerminatorRegex.test(line);
+      const isShort = line.length < shortLineThreshold;
+      
+      if (endsWithPunctuation && isShort) {
+        paragraphs.push(currentPara);
+        currentPara = [];
+      }
+    }
+    
+    if (currentPara.length > 0) {
+      paragraphs.push(currentPara);
+    }
+    
+    // 4. Merge lines within each paragraph
+    const cleanedParagraphs = paragraphs.map(paraLines => {
       let mergedPara = '';
-      for (let i = 0; i < lines.length; i++) {
-        if (i === 0) {
-          mergedPara = lines[i];
+      for (let i = 0; i < paraLines.length; i++) {
+        const line = paraLines[i];
+        if (!mergedPara) {
+          mergedPara = line;
         } else {
-          const prev = lines[i - 1];
-          const curr = lines[i];
-          const lastCharOfPrev = prev.slice(-1);
-          const firstCharOfCurr = curr.charAt(0);
+          const lastChar = mergedPara.slice(-1);
+          const firstChar = line.charAt(0);
           
-          // Check for drop cap merging (e.g., 'W' + 'HEN' -> 'WHEN')
-          const isDropCap = prev.length === 1 && /^[A-Z]$/.test(prev) && /^[A-Z]$/.test(firstCharOfCurr);
-          const isChinese = /[\u4e00-\u9fa5]/.test(lastCharOfPrev) || /[\u4e00-\u9fa5]/.test(firstCharOfCurr);
+          const isDropCap = mergedPara.length === 1 && /^[A-Z]$/.test(mergedPara) && /^[A-Z]$/.test(firstChar);
+          const isChinese = /[\u4e00-\u9fa5]/.test(lastChar) || /[\u4e00-\u9fa5]/.test(firstChar);
           
           if (isDropCap) {
-            mergedPara += curr;
+            mergedPara += line;
           } else if (isChinese) {
-            mergedPara += curr;
+            mergedPara += line;
           } else {
-            mergedPara += ' ' + curr;
+            // Hyphenated word wrap at line end
+            if (mergedPara.endsWith("-")) {
+              mergedPara = mergedPara.slice(0, -1) + line;
+            } else {
+              mergedPara += " " + line;
+            }
           }
         }
       }
@@ -393,11 +476,12 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
 
   // Sync initialText if it changes from parent
   useEffect(() => {
-    if (initialText) {
-      setTextToConvert(initialText);
-      setEditableText(initialText);
-      setMode('text');
-    }
+    const nextText = initialText || '';
+    setTextToConvert(nextText);
+    setEditableText(nextText);
+    setOriginalExtractedText('');
+    setDraftStatus('idle');
+    setMode(nextText ? 'text' : 'pages');
   }, [initialText]);
 
   // Load defaults from AppSettings
@@ -446,6 +530,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     try {
       const created = await api<Task>('/api/tasks', { method: 'POST', body: JSON.stringify(payload) });
       setTask(created);
+      onTaskCreated?.(created);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('createTaskFailed'));
     }
