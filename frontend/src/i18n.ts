@@ -9,6 +9,7 @@ export const translations = {
     mediaLibrary: '媒体库',
     pdfReader: 'PDF 阅读器',
     convertPdf: '转换 PDF',
+    taskManager: '任务管理',
     closeFile: '关闭文件',
     close: '关闭',
     language: '语言 / Language',
@@ -63,6 +64,7 @@ export const translations = {
     createTaskFailed: '创建任务失败',
     saveTextFailed: '保存文本并重新生成失败',
     controlFailed: '控制任务失败',
+    controlSuccess: '控制任务成功',
 
     // LibraryPane
     searchInLibrary: '搜索文档...',
@@ -157,6 +159,7 @@ export const translations = {
     mediaLibrary: 'Media Library',
     pdfReader: 'PDF Reader',
     convertPdf: 'Convert PDF',
+    taskManager: 'Tasks',
     closeFile: 'Close File',
     close: 'Close',
     language: 'Language',
@@ -211,6 +214,7 @@ export const translations = {
     createTaskFailed: 'Failed to create task',
     saveTextFailed: 'Failed to save text and regenerate',
     controlFailed: 'Failed to control task',
+    controlSuccess: 'Task controlled successfully',
 
     // LibraryPane
     searchInLibrary: 'Search in library...',

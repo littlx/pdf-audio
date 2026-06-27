@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Lock, Settings, FileText, Headphones, Wand2 } from 'lucide-react';
+import { BookOpen, Lock, Settings, FileText, Headphones, Wand2, List } from 'lucide-react';
 import AccessGate from './components/AccessGate';
 import LibraryPane from './components/LibraryPane';
 import PdfReaderPane from './components/PdfReaderPane';
 import ConvertPane from './components/ConvertPane';
+import TaskManagerPane from './components/TaskManagerPane';
 import GlobalPlayer from './components/GlobalPlayer';
 import SubtitleDrawer from './components/SubtitleDrawer';
 import SettingsDrawer from './components/SettingsDrawer';
@@ -33,7 +34,7 @@ function DashboardContent({
   } = usePlayer();
 
   const [selectedPdf, setSelectedPdf] = useState<PdfFile | undefined>(undefined);
-  const [leftTab, setLeftTab] = useState<'library' | 'media' | 'reader' | 'convert'>('library');
+  const [leftTab, setLeftTab] = useState<'library' | 'media' | 'reader' | 'convert' | 'tasks'>('library');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // If selectedPdf changes, sync left tab to 'reader'
@@ -119,6 +120,13 @@ function DashboardContent({
                 <Wand2 size={13} />
                 <span>{t('convertPdf')}</span>
               </button>
+              <button
+                className={`pane-tab-btn ${leftTab === 'tasks' ? 'is-active' : ''}`}
+                onClick={() => setLeftTab('tasks')}
+              >
+                <List size={13} />
+                <span>{t('taskManager') || '任务管理'}</span>
+              </button>
             </div>
           </div>
 
@@ -148,6 +156,9 @@ function DashboardContent({
                 pdf={selectedPdf}
                 onConversionComplete={handleConversionComplete}
               />
+            </div>
+            <div style={{ display: leftTab === 'tasks' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+              <TaskManagerPane />
             </div>
           </div>
         </section>
