@@ -8,7 +8,7 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.core.security import require_access_token
-from app.db.models import BilingualSegment, ConversionTask, PdfFile
+from app.db.models import BilingualSegment, ConversionTask, PdfFile, AudioFile
 from app.db.session import get_db, db_session
 from app.core.utils import safe_path_under
 from app.services.artifact_service import delete_artifacts, get_artifact, set_artifact
@@ -206,3 +206,31 @@ async def task_events(task_id: str):
             active_sse_connections -= 1
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+@router.delete("/{task_id}", response_model=OkOut)
+def delete_task(task_id: str, db: Session = Depends(get_db)):
+    task = get_task_or_404(db, task_id)
+    if task.status in {"pending", "running", "canceling"}:
+        conflict("Cannot delete an active task. Please cancel it first.")
+
+    # Delete associated AudioFile if exists
+    audio = db.query(AudioFile).filter(AudioFile.task_id == task_id).first()
+    if audio:
+        safe_path_under(audio.audio_path, Path(settings.storage_dir) / "audios" / audio.id)
+        shutil.rmtree(Path(settings.storage_dir) / "audios" / audio.id, ignore_errors=True)
+        db.delete(audio)
+
+    # Delete segments
+    db.query(BilingualSegment).filter(BilingualSegment.task_id == task_id).delete()
+
+    # Delete artifacts
+    delete_artifacts(db, task.id, ["edited_text", "extracted_text", "segments_done", "clip_manifest", "audio_path", "subtitle_json_path", "subtitle_vtt_path", "subtitle_srt_path"])
+    
+    # Delete task folder from storage
+    task_storage = safe_path_under(Path(settings.storage_dir) / "tasks" / task.id, Path(settings.storage_dir) / "tasks")
+    shutil.rmtree(task_storage, ignore_errors=True)
+    
+    db.delete(task)
+    db.commit()
+    return {"ok": True}

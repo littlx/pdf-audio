@@ -1323,9 +1323,10 @@ audio {
 
 .task-card {
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  padding: 16px;
+  border: none;
+  border-bottom: 1px dashed var(--border);
+  border-radius: 0;
+  padding: 16px 8px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1335,22 +1336,11 @@ audio {
 }
 
 .task-card:hover {
-  border-color: var(--ring);
-  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.04);
+  background: var(--muted);
 }
 
-/* Status left-border accents */
-.task-card.status-running {
-  border-left: 3px solid var(--ring);
-}
-.task-card.status-paused {
-  border-left: 3px solid #f59e0b;
-}
-.task-card.status-failed {
-  border-left: 3px solid var(--destructive);
-}
-.task-card.status-completed {
-  border-left: 3px solid var(--muted-foreground);
+.task-card:last-child {
+  border-bottom: none;
 }
 
 .task-card-header {

@@ -65,6 +65,9 @@ export const translations = {
     saveTextFailed: '保存文本并重新生成失败',
     controlFailed: '控制任务失败',
     controlSuccess: '控制任务成功',
+    deleteConfirmTask: '确定要删除此任务吗？关联的音频文件也会被清理。',
+    deleteSuccess: '删除成功',
+    deleteTask: '删除任务',
 
     // LibraryPane
     searchInLibrary: '搜索文档...',
@@ -215,6 +218,9 @@ export const translations = {
     saveTextFailed: 'Failed to save text and regenerate',
     controlFailed: 'Failed to control task',
     controlSuccess: 'Task controlled successfully',
+    deleteConfirmTask: 'Are you sure you want to delete this task? Associated audio files will also be cleaned up.',
+    deleteSuccess: 'Deleted successfully',
+    deleteTask: 'Delete Task',
 
     // LibraryPane
     searchInLibrary: 'Search in library...',

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { FileText, Wand2, Pause, Play, RotateCcw, XCircle, RefreshCw, AlertCircle } from 'lucide-react';
+import { FileText, Wand2, Pause, Play, RotateCcw, XCircle, RefreshCw, AlertCircle, Trash2 } from 'lucide-react';
 import { api } from '../api/client';
 import type { AudioFile, Task } from '../api/types';
 import { Button } from './ui/button';
@@ -93,6 +93,19 @@ export default function TaskManagerPane() {
       await load(false);
     } catch (err) {
       toast(err instanceof Error ? err.message : '操作失败', 'error');
+    }
+  }
+
+  async function deleteTask(taskId: string) {
+    if (!window.confirm(t('deleteConfirmTask') || '确定要删除此任务吗？关联的音频文件也会被清理。')) {
+      return;
+    }
+    try {
+      await api(`/api/tasks/${taskId}`, { method: 'DELETE' });
+      toast(t('deleteSuccess') || '删除成功', 'success');
+      await load(false);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : '删除失败', 'error');
     }
   }
 
@@ -193,6 +206,17 @@ export default function TaskManagerPane() {
 
                   {/* Row 3: Action Buttons */}
                   <div className="task-card-actions">
+                    {!['pending', 'running', 'canceling'].includes(task.status) && (
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        onClick={() => deleteTask(task.id)}
+                        title={t('deleteTask') || '删除任务'}
+                        className="hover:text-destructive hover:bg-destructive/10 mr-auto text-muted-foreground"
+                      >
+                        <Trash2 size={13} />
+                      </Button>
+                    )}
                     {/* Running / Pending -> Pause, Cancel */}
                     {['pending', 'running'].includes(task.status) && (
                       <>
