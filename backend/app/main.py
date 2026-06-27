@@ -60,14 +60,12 @@ if static_dir.exists():
     assets_dir = static_dir / "assets"
     if assets_dir.exists():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
-    public_files = ["manifest.webmanifest", "sw.js", "vite.svg"]
-
     @app.get("/{full_path:path}")
     def serve_spa(full_path: str):
         if full_path.startswith("api/") or full_path in {"docs", "redoc", "openapi.json"}:
             raise HTTPException(status_code=404, detail="Not found")
         target = static_dir / full_path
-        if full_path in public_files and target.exists():
+        if target.is_file():
             return FileResponse(target)
         index = static_dir / "index.html"
         if index.exists():

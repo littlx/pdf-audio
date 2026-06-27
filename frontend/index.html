@@ -1,6 +1,15 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      (function() {
+        try {
+          if (localStorage.getItem('theme_dark') === 'true') {
+            document.documentElement.classList.add('dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#111827" />

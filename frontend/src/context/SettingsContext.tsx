@@ -36,7 +36,13 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 
 export const SettingsProvider: React.FC<{ children: React.ReactNode; unlocked: boolean }> = ({ children, unlocked }) => {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    try {
+      return localStorage.getItem('theme_dark') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -68,8 +74,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; unlocked: b
     const root = document.documentElement;
     if (isDark) {
       root.classList.add('dark');
+      localStorage.setItem('theme_dark', 'true');
     } else {
       root.classList.remove('dark');
+      localStorage.setItem('theme_dark', 'false');
     }
   }, [isDark]);
 
