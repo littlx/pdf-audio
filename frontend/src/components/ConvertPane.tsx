@@ -17,6 +17,7 @@ type ConvertPaneProps = {
   pdf?: PdfFile;
   initialText?: string;
   onConversionComplete?: (audio: AudioFile) => void;
+  onJumpToPdfPage?: (pageNum: number) => void;
 };
 
 function canPause(status: string) {
@@ -66,7 +67,7 @@ const mergeTask = (prev: Task | null, incoming: Task): Task => {
   };
 };
 
-export default function ConvertPane({ pdf, initialText = '', onConversionComplete }: ConvertPaneProps) {
+export default function ConvertPane({ pdf, initialText = '', onConversionComplete, onJumpToPdfPage }: ConvertPaneProps) {
   const { t, lang } = useT();
   const { toast } = useToast();
 
@@ -317,7 +318,25 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       <div className="convert-form-card">
         {mode === 'pages' ? (
           <div className="form-group">
-            <label htmlFor="pages-input">{t('pageExpression')}</label>
+            <div className="flex justify-between items-center mb-1.5">
+              <label htmlFor="pages-input" className="mb-0">{t('pageExpression')}</label>
+              {pdf && onJumpToPdfPage && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const match = pageExpression.match(/\d+/);
+                    if (match) {
+                      const pNum = parseInt(match[0], 10);
+                      onJumpToPdfPage(pNum);
+                    }
+                  }}
+                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0"
+                >
+                  <FileText size={13} />
+                  <span>{t('locatePage') || '在阅读器中定位'}</span>
+                </button>
+              )}
+            </div>
             <input
               id="pages-input"
               value={pageExpression}

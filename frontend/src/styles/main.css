@@ -362,6 +362,11 @@ html.dark .pane-tab-btn:hover {
   background: transparent;
 }
 
+.pane-content.no-scroll-layout {
+  overflow-y: hidden;
+  padding: 0;
+}
+
 /* Library List Pane styling */
 .library-filters {
   display: flex;
@@ -1803,4 +1808,19 @@ audio {
   .edit-title-btn {
     opacity: 0.65 !important;
   }
+}
+
+/* PDF.js Selectable Text Layer styling tweaks */
+.textLayer {
+  mix-blend-mode: multiply;
+  opacity: 1.0 !important;
+}
+
+.textLayer ::selection {
+  background: rgba(14, 165, 233, 0.3) !important;
+}
+
+.pdf-viewport-container {
+  user-select: text !important;
+  -webkit-user-select: text !important;
 }

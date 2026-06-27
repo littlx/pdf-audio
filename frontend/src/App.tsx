@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Lock, Settings, FileText, Headphones, Volume2, List } from 'lucide-react';
+import { BookOpen, Lock, Settings, FileText, Headphones, Volume2, List, Download } from 'lucide-react';
 import AccessGate from './components/AccessGate';
 import LibraryPane from './components/LibraryPane';
 import PdfReaderPane from './components/PdfReaderPane';
@@ -36,6 +36,32 @@ function DashboardContent({
   const [selectedPdf, setSelectedPdf] = useState<PdfFile | undefined>(undefined);
   const [leftTab, setLeftTab] = useState<'library' | 'media' | 'reader' | 'convert' | 'tasks'>('library');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [pdfJumpTrigger, setPdfJumpTrigger] = useState<{ page: number; ts: number } | undefined>(undefined);
+
+  const handleJumpToPdfPage = (page: number) => {
+    setPdfJumpTrigger({ page, ts: Date.now() });
+    setLeftTab('reader');
+  };
+
+  // Handle PWA installation prompt
+  useEffect(() => {
+    const handlePrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handlePrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handlePrompt);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    const { outcome } = await installPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setInstallPrompt(null);
+    }
+  };
 
   // If selectedPdf changes, sync left tab to 'reader'
   useEffect(() => {
@@ -71,6 +97,12 @@ function DashboardContent({
         </div>
 
         <div className="header-actions">
+          {installPrompt && (
+            <Button variant="ghost" size="sm" onClick={handleInstallClick} className="header-btn text-ring">
+              <Download size={14} />
+              <span>{t('installApp') || '安装应用'}</span>
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => setIsSettingsOpen(true)} className="header-btn">
             <Settings size={14} />
             <span>{t('settings')}</span>
@@ -128,7 +160,7 @@ function DashboardContent({
             </div>
           </div>
 
-          <div className="pane-content">
+          <div className={`pane-content ${leftTab === 'reader' ? 'no-scroll-layout' : ''}`}>
             <div style={{ display: leftTab === 'library' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
               <LibraryPane
                 activePdfId={selectedPdf?.id}
@@ -144,15 +176,16 @@ function DashboardContent({
             <div style={{ display: leftTab === 'media' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
               <MediaPane />
             </div>
-            {selectedPdf && (
-              <div style={{ display: leftTab === 'reader' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
-                <PdfReaderPane pdf={selectedPdf} />
+             {selectedPdf && (
+              <div style={{ display: leftTab === 'reader' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <PdfReaderPane pdf={selectedPdf} jumpPageTrigger={pdfJumpTrigger} />
               </div>
             )}
             <div style={{ display: leftTab === 'convert' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
               <ConvertPane
                 pdf={selectedPdf}
                 onConversionComplete={handleConversionComplete}
+                onJumpToPdfPage={handleJumpToPdfPage}
               />
             </div>
             <div style={{ display: leftTab === 'tasks' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
@@ -176,6 +209,7 @@ function DashboardContent({
             <ConvertPane
               pdf={selectedPdf}
               onConversionComplete={handleConversionComplete}
+              onJumpToPdfPage={handleJumpToPdfPage}
             />
           </div>
         </section>
