@@ -96,11 +96,18 @@ export default function TaskManagerPane() {
     }
   }
 
-  async function deleteTask(taskId: string) {
-    const ok = await confirm(t('deleteConfirmTask'));
+  async function deleteTask(task: Task) {
+    const isRunning = ['pending', 'running', 'canceling'].includes(task.status);
+    const confirmMsg = isRunning
+      ? (lang === 'zh'
+        ? '警告：该任务目前处于活跃或取消中状态。强制删除将立即终止它，并清理所有临时与音频文件。确定要强制删除吗？'
+        : 'Warning: This task is currently active or canceling. Force deleting it will terminate the process and purge all temp/audio files. Are you sure you want to proceed?')
+      : t('deleteConfirmTask');
+
+    const ok = await confirm(confirmMsg);
     if (!ok) return;
     try {
-      await api(`/api/tasks/${taskId}`, { method: 'DELETE' });
+      await api(`/api/tasks/${task.id}`, { method: 'DELETE' });
       toast(t('deleteSuccess') || '删除成功', 'success');
       await load(false);
     } catch (err) {
@@ -264,17 +271,15 @@ export default function TaskManagerPane() {
                   {/* Right Column: Row Action controls */}
                   <div className="task-dash-right">
                     {/* Delete Icon (Far Left in actions group) */}
-                    {!['pending', 'running', 'canceling'].includes(task.status) && (
-                      <Button
-                        variant="ghost"
-                        size="iconSm"
-                        onClick={() => deleteTask(task.id)}
-                        title={t('deleteTask')}
-                        className="hover:text-destructive hover:bg-destructive/10 text-muted-foreground"
-                      >
-                        <Trash2 size={12.5} />
-                      </Button>
-                    )}
+                    <Button
+                      variant="ghost"
+                      size="iconSm"
+                      onClick={() => deleteTask(task)}
+                      title={t('deleteTask')}
+                      className="hover:text-destructive hover:bg-destructive/10 text-muted-foreground mr-auto"
+                    >
+                      <Trash2 size={12.5} />
+                    </Button>
 
                     {/* Active controls: Pause, Resume, Cancel, Retry */}
                     {['pending', 'running'].includes(task.status) && (

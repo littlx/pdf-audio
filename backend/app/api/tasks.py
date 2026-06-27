@@ -211,8 +211,6 @@ async def task_events(task_id: str):
 @router.delete("/{task_id}", response_model=OkOut)
 def delete_task(task_id: str, db: Session = Depends(get_db)):
     task = get_task_or_404(db, task_id)
-    if task.status in {"pending", "running", "canceling"}:
-        conflict("Cannot delete an active task. Please cancel it first.")
 
     # Delete associated AudioFile if exists
     audio = db.query(AudioFile).filter(AudioFile.task_id == task_id).first()
