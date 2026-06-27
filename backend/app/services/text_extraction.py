@@ -1,4 +1,5 @@
 import re
+import functools
 from pathlib import Path
 
 import fitz
@@ -60,6 +61,30 @@ def _clean_text(text: str) -> str:
     return joined.strip()
 
 
+def compare_blocks(b1: tuple, b2: tuple) -> int:
+    x0_1, y0_1, x1_1, y1_1 = b1[:4]
+    x0_2, y0_2, x1_2, y1_2 = b2[:4]
+    
+    # Check if they are vertically separated
+    # If one block is completely above the other (with a tiny tolerance of 3px)
+    if y1_1 <= y0_2 + 3:
+        return -1
+    if y1_2 <= y0_1 + 3:
+        return 1
+        
+    # If they overlap vertically, sort left-to-right
+    # Check if they are horizontally separated
+    if x1_1 <= x0_2 + 3:
+        return -1
+    if x1_2 <= x0_1 + 3:
+        return 1
+        
+    # If they overlap both vertically and horizontally, sort by top-to-bottom, then left-to-right
+    if y0_1 != y0_2:
+        return -1 if y0_1 < y0_2 else 1
+    return -1 if x0_1 < x0_2 else 1
+
+
 def _extract_page_text(page: fitz.Page) -> str:
     blocks = page.get_text("blocks")
     width = page.rect.width
@@ -75,14 +100,12 @@ def _extract_page_text(page: fitz.Page) -> str:
             continue
         if x1 - x0 < 15 or y1 - y0 < 5:
             continue
+        # Exclude 'ALSO IN THIS SECTION' navigation boxes
+        if re.search(r"also\s+in\s+this\s+section", text, flags=re.I):
+            continue
         body_blocks.append((x0, y0, x1, y1, text))
 
-    left = [b for b in body_blocks if b[0] < width * 0.52]
-    right = [b for b in body_blocks if b[0] >= width * 0.45]
-    if len(left) >= 2 and len(right) >= 2:
-        ordered = sorted(left, key=lambda b: (b[1], b[0])) + sorted(right, key=lambda b: (b[1], b[0]))
-    else:
-        ordered = sorted(body_blocks, key=lambda b: (b[1], b[0]))
+    ordered = sorted(body_blocks, key=functools.cmp_to_key(compare_blocks))
     return "\n".join(block[4].strip() for block in ordered)
 
 
