@@ -32,8 +32,18 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
   useEffect(() => {
     if (isOpen) {
       setLocalSettings(settings);
+      setApiKeyInput('');
+      setMessage('');
+      setError('');
+    } else {
+      setApiKeyInput('');
+      setMessage('');
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+        previewAudioRef.current = null;
+      }
     }
-  }, [isOpen, settings]);
+  }, [isOpen, settings, setError]);
 
   useEffect(() => {
     if (!isOpen) return;

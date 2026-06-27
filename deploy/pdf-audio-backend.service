@@ -4,18 +4,21 @@ After=network.target redis-server.service
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/py-app/pdf-audio/backend
-ExecStart=/root/py-app/pdf-audio/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8543
+User=pdf-audio
+Group=pdf-audio
+WorkingDirectory=/opt/pdf-audio/backend
+Environment=APP_ENV=production
+Environment=PYTHONPATH=/opt/pdf-audio/backend
+Environment=PATH=/opt/pdf-audio/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/etc/pdf-audio/pdf-audio.env
+ExecStart=/opt/pdf-audio/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8543
 Restart=always
 RestartSec=5
-
-# Environment variables
-Environment=DATABASE_URL=sqlite:///./app.db
-Environment=REDIS_URL=redis://localhost:6379/0
-# Note: Set your actual API Key here in production or load from a separate env file
-Environment=OPENAI_API_KEY=your-api-key-here
-Environment=OPENAI_BASE_URL=your-api-base-url-if-needed
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/pdf-audio /opt/pdf-audio/storage
 
 [Install]
 WantedBy=multi-user.target

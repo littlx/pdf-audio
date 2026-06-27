@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from app.api import audios, pdfs, settings as settings_api, tasks
+from app.api import audios, auth, pdfs, settings as settings_api, tasks
 from app.api.schemas import HealthOut
 from app.core.config import settings, validate_runtime_settings
 from app.core.utils import ensure_dir
@@ -50,6 +50,7 @@ def health():
     return {"ok": True}
 
 
+app.include_router(auth.router)
 app.include_router(pdfs.router)
 app.include_router(tasks.router)
 app.include_router(audios.router)

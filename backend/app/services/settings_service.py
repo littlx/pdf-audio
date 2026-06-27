@@ -1,8 +1,11 @@
+import base64
 import json
 from urllib.parse import urlparse
 
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.models import AppSetting
 
 DEFAULT_SETTINGS = {
@@ -24,28 +27,68 @@ DEFAULT_SETTINGS = {
     "dark_mode": True,
 }
 
+FERNET_PREFIX = "fernet:"
+XOR_PREFIX = "xor:"
 
-import base64
-from app.core.config import settings
 
-def _encrypt_val(val: str) -> str:
+def _xor_encrypt_val(val: str) -> str:
     if not val:
         return ""
     key = settings.app_access_token.encode("utf-8")
+    if not key:
+        raise ValueError("APP_ACCESS_TOKEN is required to decrypt legacy settings")
     val_bytes = val.encode("utf-8")
     encrypted = bytes(val_bytes[i] ^ key[i % len(key)] for i in range(len(val_bytes)))
     return base64.b64encode(encrypted).decode("utf-8")
 
 
+def _xor_decrypt_val(val: str) -> str:
+    if not val:
+        return ""
+    key = settings.app_access_token.encode("utf-8")
+    if not key:
+        raise ValueError("APP_ACCESS_TOKEN is required to decrypt legacy settings")
+    encrypted = base64.b64decode(val.encode("utf-8"))
+    decrypted = bytes(encrypted[i] ^ key[i % len(key)] for i in range(len(encrypted)))
+    return decrypted.decode("utf-8")
+
+
+def _fernet() -> Fernet:
+    key = (settings.settings_encryption_key or "").strip()
+    if not key:
+        if settings.app_env.lower() == "development":
+            key_bytes = settings.app_access_token.encode("utf-8")
+            key = base64.urlsafe_b64encode(key_bytes.ljust(32, b"0")[:32]).decode("ascii")
+        else:
+            raise ValueError("SETTINGS_ENCRYPTION_KEY must be set to save API keys outside development")
+    try:
+        return Fernet(key.encode("ascii"))
+    except Exception as exc:
+        raise ValueError("SETTINGS_ENCRYPTION_KEY must be a valid Fernet key") from exc
+
+
+def _encrypt_val(val: str) -> str:
+    if not val:
+        return ""
+    token = _fernet().encrypt(val.encode("utf-8")).decode("ascii")
+    return FERNET_PREFIX + token
+
+
 def _decrypt_val(val: str) -> str:
     if not val:
         return ""
+    if val.startswith(FERNET_PREFIX):
+        token = val[len(FERNET_PREFIX):].encode("ascii")
+        try:
+            return _fernet().decrypt(token).decode("utf-8")
+        except (InvalidToken, ValueError) as exc:
+            raise ValueError("Stored AI API key cannot be decrypted; re-save it in Settings") from exc
+    if val.startswith(XOR_PREFIX):
+        return _xor_decrypt_val(val[len(XOR_PREFIX):])
     try:
-        key = settings.app_access_token.encode("utf-8")
-        encrypted = base64.b64decode(val.encode("utf-8"))
-        decrypted = bytes(encrypted[i] ^ key[i % len(key)] for i in range(len(encrypted)))
-        return decrypted.decode("utf-8")
+        return _xor_decrypt_val(val)
     except Exception:
+        # Legacy plaintext values were possible before encrypted storage existed.
         return val
 
 
@@ -102,7 +145,7 @@ def update_settings(db: Session, payload: dict) -> dict:
                 continue
             if not str(value or "").strip():
                 continue
-            value = _encrypt_val(value)
+            value = _encrypt_val(str(value).strip())
         if key == "ai_base_url":
             value = validate_ai_base_url(str(value))
         updates[key] = value

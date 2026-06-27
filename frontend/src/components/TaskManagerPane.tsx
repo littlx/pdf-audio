@@ -39,7 +39,12 @@ function getStageLabel(stage: string, lang: string): string {
   }
 }
 
-export default function TaskManagerPane() {
+type TaskManagerPaneProps = {
+  refreshKey?: number;
+  active?: boolean;
+};
+
+export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskManagerPaneProps) {
   const { t, lang } = useT();
   const { toast, confirm } = useToast();
   const { activeAudio, setActiveAudio, isPlaying, togglePlay } = usePlayer();
@@ -76,6 +81,18 @@ export default function TaskManagerPane() {
   }, [load]);
 
   useEffect(() => {
+    if (refreshKey > 0) {
+      load(false);
+    }
+  }, [refreshKey, load]);
+
+  useEffect(() => {
+    if (active) {
+      load(true);
+    }
+  }, [active, load]);
+
+  useEffect(() => {
     const hasActiveTasks = tasks.some(t => ['pending', 'running', 'canceling'].includes(t.status));
     if (!hasActiveTasks) return;
 
@@ -100,12 +117,12 @@ export default function TaskManagerPane() {
     const isRunning = ['pending', 'running', 'canceling'].includes(task.status);
     const confirmMsg = isRunning
       ? (lang === 'zh'
-        ? '警告：该任务目前处于活跃或取消中状态。强制删除将立即终止它，并清理所有临时与音频文件。确定要强制删除吗？'
-        : 'Warning: This task is currently active or canceling. Force deleting it will terminate the process and purge all temp/audio files. Are you sure you want to proceed?')
+        ? '该任务仍处于活跃或取消中状态。请先取消并等待任务停止后再删除。'
+        : 'This task is still active or canceling. Cancel it first and wait for it to stop before deleting.')
       : t('deleteConfirmTask');
 
     const ok = await confirm(confirmMsg);
-    if (!ok) return;
+    if (!ok || isRunning) return;
     try {
       await api(`/api/tasks/${task.id}`, { method: 'DELETE' });
       toast(t('deleteSuccess') || '删除成功', 'success');
@@ -216,8 +233,8 @@ export default function TaskManagerPane() {
                     </div>
 
                     <div className="task-dash-info">
-                      <span className="task-dash-title" title={task.source_pdf_name || '粘贴文本转换'}>
-                        {task.input_type === 'page_range' ? task.source_pdf_name : '粘贴文本转换'}
+                      <span className="task-dash-title" title={task.custom_title || task.source_pdf_name || '粘贴文本转换'}>
+                        {task.custom_title || (task.input_type === 'page_range' ? task.source_pdf_name : '粘贴文本转换')}
                       </span>
                       <div className="task-dash-chips">
                         <span className="task-chip">
@@ -357,7 +374,10 @@ export default function TaskManagerPane() {
             <div className="empty-state p-8 text-center text-muted-foreground">
               <FileText size={32} className="mx-auto opacity-40 mb-2" />
               <h3 className="font-bold text-sm">暂无任务记录</h3>
-              <p className="text-xs">所有的 PDF 和文本转换任务都将在此处展示。</p>
+              <p className="text-xs mb-3">所有的 PDF 和文本转换任务都将在此处展示。</p>
+              <Button variant="secondary" size="sm" onClick={() => load(true)}>
+                <RefreshCw size={13} /> {t('refreshStatus') || '刷新'}
+              </Button>
             </div>
           )}
         </div>

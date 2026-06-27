@@ -39,20 +39,35 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode; unlocked: boo
 
   // Restore last played audio
   useEffect(() => {
-    if (!unlocked) return;
+    if (!unlocked) {
+      setActiveAudioState(null);
+      setIsPlaying(false);
+      setActiveSub(null);
+      setSubs([]);
+      setIsSubtitlesOpen(false);
+      setSeekTime(null);
+      localStorage.removeItem('app-last-audio-id');
+      return;
+    }
+
+    let canceled = false;
     const restoreLastAudio = async () => {
       try {
         const list = await api<AudioFile[]>('/api/audios');
+        if (canceled) return;
         if (list && list.length > 0) {
           const lastId = localStorage.getItem('app-last-audio-id');
           const lastAudio = list.find((a) => a.id === lastId) || list[0];
           setActiveAudioState(lastAudio);
         }
       } catch (err) {
-        console.error('Restore last audio failed:', err);
+        if (!canceled) console.error('Restore last audio failed:', err);
       }
     };
     restoreLastAudio();
+    return () => {
+      canceled = true;
+    };
   }, [unlocked]);
 
   const setActiveAudio = (audio: AudioFile | null) => {

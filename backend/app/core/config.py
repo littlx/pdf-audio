@@ -18,7 +18,12 @@ class Settings(BaseSettings):
     cors_origins: str = Field(default="http://localhost:8543,http://localhost:5173", alias="CORS_ORIGINS")
     worker_fallback_to_thread: bool = Field(default=True, alias="WORKER_FALLBACK_TO_THREAD")
     worker_mode: str = Field(default="simple", alias="WORKER_MODE")
+    max_active_tasks: int = Field(default=5, alias="MAX_ACTIVE_TASKS")
+    running_task_stale_seconds: int = Field(default=7200, alias="RUNNING_TASK_STALE_SECONDS")
     ai_api_key: str | None = Field(default=None, alias="AI_API_KEY")
+    settings_encryption_key: str | None = Field(default=None, alias="SETTINGS_ENCRYPTION_KEY")
+    cookie_secure: bool = Field(default=False, alias="COOKIE_SECURE")
+    tts_proxy: str | None = Field(default=None, alias="TTS_PROXY")
 
     model_config = SettingsConfigDict(env_file=(PROJECT_ROOT / ".env", BACKEND_ROOT / ".env"), extra="ignore")
 
@@ -26,6 +31,31 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
+def _is_production_like() -> bool:
+    return settings.app_env.lower() not in {"development", "dev", "local", "test"}
+
+
 def validate_runtime_settings() -> None:
-    if settings.app_env.lower() != "development" and (not settings.app_access_token or settings.app_access_token == "change-me"):
-        raise RuntimeError("APP_ACCESS_TOKEN must be set to a non-default value outside development")
+    app_env = settings.app_env.lower()
+    token = (settings.app_access_token or "").strip()
+    worker_mode = settings.worker_mode.lower()
+    origins = [item.strip() for item in settings.cors_origins.split(",") if item.strip()]
+
+    if worker_mode not in {"simple", "fork"}:
+        raise RuntimeError("WORKER_MODE must be either 'simple' or 'fork'")
+    if settings.max_active_tasks < 1:
+        raise RuntimeError("MAX_ACTIVE_TASKS must be at least 1")
+    if settings.running_task_stale_seconds < 60:
+        raise RuntimeError("RUNNING_TASK_STALE_SECONDS must be at least 60")
+    if not token:
+        raise RuntimeError("APP_ACCESS_TOKEN must be set")
+
+    if _is_production_like():
+        if token == "change-me" or token == "replace-with-a-long-random-access-code" or len(token) < 16:
+            raise RuntimeError("APP_ACCESS_TOKEN must be set to a long non-default value outside development")
+        if settings.worker_fallback_to_thread:
+            raise RuntimeError("WORKER_FALLBACK_TO_THREAD must be false outside development")
+        if not settings.redis_url:
+            raise RuntimeError("REDIS_URL must be set outside development")
+        if "*" in origins:
+            raise RuntimeError("CORS_ORIGINS must be explicit outside development; wildcard '*' is not allowed")

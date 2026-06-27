@@ -8,11 +8,12 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import require_access_token
 from app.core.utils import new_id, safe_path_under
-from app.db.models import AudioFile, PlaybackRecord
+from app.db.models import AudioFile, ConversionTask, PlaybackRecord
 from app.db.session import get_db
 from app.api.schemas import AudioOut, OkOut, PlaybackIn, PlaybackOut, AudioRename
 
 router = APIRouter(prefix="/api/audios", tags=["audios"], dependencies=[Depends(require_access_token)])
+ACTIVE_TASK_STATUSES = {"pending", "running", "canceling"}
 
 
 def get_audio_or_404(db: Session, audio_id: str) -> AudioFile:
@@ -24,6 +25,10 @@ def get_audio_or_404(db: Session, audio_id: str) -> AudioFile:
 
 def audio_storage_dir(audio_id: str) -> Path:
     return Path(settings.storage_dir) / "audios" / audio_id
+
+
+def safe_audio_dir(audio_id: str) -> Path:
+    return safe_path_under(audio_storage_dir(audio_id), Path(settings.storage_dir) / "audios")
 
 
 @router.get("", response_model=list[AudioOut])
@@ -40,8 +45,17 @@ def get_audio(audio_id: str, db: Session = Depends(get_db)):
 @router.delete("/{audio_id}", response_model=OkOut)
 def delete_audio(audio_id: str, db: Session = Depends(get_db)):
     audio = get_audio_or_404(db, audio_id)
-    safe_path_under(audio.audio_path, audio_storage_dir(audio_id))
-    shutil.rmtree(audio_storage_dir(audio_id), ignore_errors=True)
+    if audio.task_id:
+        task = db.get(ConversionTask, audio.task_id)
+        if task and task.status in ACTIVE_TASK_STATUSES:
+            raise HTTPException(status_code=409, detail="Cancel the source task and wait for it to stop before deleting this audio")
+    target_dir = safe_audio_dir(audio_id)
+    safe_path_under(audio.audio_path, target_dir)
+    for path_attr in ("subtitle_json_path", "subtitle_vtt_path", "subtitle_srt_path"):
+        path = getattr(audio, path_attr)
+        if path:
+            safe_path_under(path, target_dir)
+    shutil.rmtree(target_dir, ignore_errors=True)
     db.delete(audio)
     db.commit()
     return {"ok": True}
@@ -52,7 +66,7 @@ def _serve_audio_file(db: Session, audio_id: str, path_attr: str, media_type: st
     path = getattr(audio, path_attr)
     if not path:
         raise HTTPException(status_code=404, detail="File not found")
-    safe_path = safe_path_under(path, audio_storage_dir(audio_id))
+    safe_path = safe_path_under(path, safe_audio_dir(audio_id))
     if not safe_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     filename = f"{audio.title}.mp3" if path_attr == "audio_path" else default_filename

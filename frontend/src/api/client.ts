@@ -1,18 +1,28 @@
 const TOKEN_KEY = 'sub_pdf_access_token';
 const OFFLINE_CACHE = 'sub-pdf-offline-audio-v1';
+const DRAFT_PREFIX = 'pdf_audio_draft_';
+const LAST_AUDIO_KEY = 'app-last-audio-id';
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY) || '';
+  return sessionStorage.getItem(TOKEN_KEY) || '';
 }
 
-export function setToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token);
-  document.cookie = `${TOKEN_KEY}=${encodeURIComponent(token)}; path=/; SameSite=Lax`;
+export async function setToken(token: string) {
+  await api('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+    skipAuth: true,
+  });
+  sessionStorage.setItem(TOKEN_KEY, token);
 }
 
-export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
-  document.cookie = `${TOKEN_KEY}=; path=/; max-age=0; SameSite=Lax`;
+export async function clearToken() {
+  sessionStorage.removeItem(TOKEN_KEY);
+  try {
+    await api('/api/auth/logout', { method: 'POST', skipAuth: true });
+  } catch {
+    // Ignore logout network failures; local session state is already cleared.
+  }
 }
 
 function formatValidationError(detail: unknown) {
@@ -26,14 +36,17 @@ function formatValidationError(detail: unknown) {
   return '';
 }
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers = new Headers(options.headers || {});
+type ApiRequestInit = RequestInit & { skipAuth?: boolean };
+
+export async function api<T>(path: string, options: ApiRequestInit = {}): Promise<T> {
+  const { skipAuth, ...fetchOptions } = options;
+  const headers = new Headers(fetchOptions.headers || {});
   const token = getToken();
-  if (token) headers.set('X-Access-Token', token);
-  if (!(options.body instanceof FormData) && options.body && !headers.has('Content-Type')) {
+  if (token && !skipAuth) headers.set('X-Access-Token', token);
+  if (!(fetchOptions.body instanceof FormData) && fetchOptions.body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  const response = await fetch(path, { ...options, headers });
+  const response = await fetch(path, { ...fetchOptions, headers, credentials: 'same-origin' });
   if (!response.ok) {
     let message = response.statusText;
     try {
@@ -50,4 +63,16 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 export async function clearOfflineCaches() {
   if ('caches' in window) await caches.delete(OFFLINE_CACHE);
   navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_OFFLINE_CACHE', cacheName: OFFLINE_CACHE });
+}
+
+export function clearLocalAppState() {
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(DRAFT_PREFIX)) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach((key) => localStorage.removeItem(key));
+  localStorage.removeItem(LAST_AUDIO_KEY);
 }

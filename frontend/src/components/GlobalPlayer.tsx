@@ -59,6 +59,11 @@ export default function GlobalPlayer() {
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const autoPlayTriggered = useRef<string | null>(null);
+  const activeAudioIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeAudioIdRef.current = activeAudio?.id ?? null;
+  }, [activeAudio?.id]);
 
   function changeSpeed(rate: number) {
     if (audioRef.current) {
@@ -127,6 +132,9 @@ export default function GlobalPlayer() {
       setDuration(0);
       return;
     }
+
+    const audioId = activeAudio.id;
+    let canceled = false;
     setDisplayedText('');
     setIsPlaying(false);
     setCurrentTime(0);
@@ -135,15 +143,20 @@ export default function GlobalPlayer() {
     // Fetch subtitles JSON
     api<SubtitleEntry[]>(activeAudio.subtitle_json_url)
       .then((data) => {
-        setSubs(data);
+        if (!canceled && activeAudioIdRef.current === audioId) {
+          setSubs(data);
+        }
       })
       .catch(() => {
-        setSubs([]);
+        if (!canceled && activeAudioIdRef.current === audioId) {
+          setSubs([]);
+        }
       });
 
     // Fetch playback state
-    api<any>(`/api/audios/${activeAudio.id}/playback`)
+    api<any>(`/api/audios/${audioId}/playback`)
       .then((record) => {
+        if (canceled || activeAudioIdRef.current !== audioId) return;
         if (audioRef.current) {
           audioRef.current.currentTime = record.current_time || 0;
           audioRef.current.playbackRate = record.playback_rate || 1;
@@ -162,6 +175,10 @@ export default function GlobalPlayer() {
 
     // Reset auto play trigger lock
     autoPlayTriggered.current = null;
+
+    return () => {
+      canceled = true;
+    };
   }, [activeAudio?.id]);
 
   // Periodic state save (every 10s)
@@ -178,13 +195,15 @@ export default function GlobalPlayer() {
     const handleUnload = () => {
       saveProgress();
     };
-    window.addEventListener('visibilitychange', () => {
+    const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         saveProgress();
       }
-    });
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('pagehide', handleUnload);
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pagehide', handleUnload);
     };
   }, [activeAudio?.id, loop]);
@@ -223,12 +242,16 @@ export default function GlobalPlayer() {
 
   async function saveProgress() {
     if (!activeAudio || !audioRef.current) return;
-    await api(`/api/audios/${activeAudio.id}/playback`, {
+    const audioId = activeAudio.id;
+    const current_time = audioRef.current.currentTime;
+    const playback_rate = audioRef.current.playbackRate;
+    const loop_current_segment = loop;
+    await api(`/api/audios/${audioId}/playback`, {
       method: 'PUT',
       body: JSON.stringify({
-        current_time: audioRef.current.currentTime,
-        playback_rate: audioRef.current.playbackRate,
-        loop_current_segment: loop,
+        current_time,
+        playback_rate,
+        loop_current_segment,
       }),
     }).catch(() => undefined);
   }

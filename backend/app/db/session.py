@@ -50,12 +50,28 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     
-    # Check and add custom_title column if missing
     if settings.database_url.startswith("sqlite"):
         with engine.connect() as conn:
-            # Check if column exists
             res = conn.execute(text("PRAGMA table_info(conversion_tasks)")).fetchall()
             cols = [r[1] for r in res]
-            if "custom_title" not in cols:
-                conn.execute(text("ALTER TABLE conversion_tasks ADD COLUMN custom_title VARCHAR"))
-                conn.commit()
+            migrations = {
+                "custom_title": "ALTER TABLE conversion_tasks ADD COLUMN custom_title VARCHAR",
+                "attempt": "ALTER TABLE conversion_tasks ADD COLUMN attempt INTEGER DEFAULT 0",
+                "rq_job_id": "ALTER TABLE conversion_tasks ADD COLUMN rq_job_id VARCHAR",
+                "worker_id": "ALTER TABLE conversion_tasks ADD COLUMN worker_id VARCHAR",
+                "started_at": "ALTER TABLE conversion_tasks ADD COLUMN started_at DATETIME",
+                "heartbeat_at": "ALTER TABLE conversion_tasks ADD COLUMN heartbeat_at DATETIME",
+            }
+            for col, sql in migrations.items():
+                if col not in cols:
+                    conn.execute(text(sql))
+            conn.commit()
+
+            indexes = conn.execute(text("PRAGMA index_list(bilingual_segments)")).fetchall()
+            index_names = {row[1] for row in indexes}
+            if "uq_bilingual_segments_task_index" not in index_names:
+                try:
+                    conn.execute(text("CREATE UNIQUE INDEX uq_bilingual_segments_task_index ON bilingual_segments (task_id, segment_index)"))
+                    conn.commit()
+                except Exception:
+                    conn.rollback()

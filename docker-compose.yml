@@ -4,10 +4,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     env_file:
-      - path: .env.example
-        required: true
       - path: .env
-        required: false
+        required: true
     environment:
       DATABASE_URL: sqlite:////app/storage/app.db
       STORAGE_DIR: /app/storage
@@ -15,7 +13,7 @@ services:
       WORKER_FALLBACK_TO_THREAD: "false"
       WORKER_MODE: fork
     ports:
-      - "8543:8543"
+      - "127.0.0.1:8543:8543"
     volumes:
       - ./storage:/app/storage
     depends_on:
@@ -28,10 +26,8 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     env_file:
-      - path: .env.example
-        required: true
       - path: .env
-        required: false
+        required: true
     environment:
       DATABASE_URL: sqlite:////app/storage/app.db
       STORAGE_DIR: /app/storage

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.utils import utcnow
 from app.db.session import Base
@@ -75,6 +75,11 @@ class ConversionTask(Base):
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
     pause_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    attempt: Mapped[int] = mapped_column(Integer, default=0)
+    rq_job_id: Mapped[str] = mapped_column(String, nullable=True)
+    worker_id: Mapped[str] = mapped_column(String, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -87,6 +92,7 @@ class ConversionTask(Base):
 
 class BilingualSegment(Base):
     __tablename__ = "bilingual_segments"
+    __table_args__ = (UniqueConstraint("task_id", "segment_index", name="uq_bilingual_segments_task_index"),)
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     task_id: Mapped[str] = mapped_column(String, ForeignKey("conversion_tasks.id", ondelete="CASCADE"), index=True)

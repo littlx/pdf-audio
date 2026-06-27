@@ -9,8 +9,8 @@ import GlobalPlayer from './components/GlobalPlayer';
 import SubtitleDrawer from './components/SubtitleDrawer';
 import SettingsDrawer from './components/SettingsDrawer';
 import MediaPane from './components/MediaPane';
-import type { PdfFile, AudioFile } from './api/types';
-import { clearOfflineCaches, clearToken, getToken } from './api/client';
+import type { PdfFile, AudioFile, Task } from './api/types';
+import { clearLocalAppState, clearOfflineCaches, clearToken, getToken } from './api/client';
 import { Button } from '@/components/ui/button';
 
 import { I18nProvider, useT } from './context/I18nContext';
@@ -37,6 +37,7 @@ function DashboardContent({
   const [leftTab, setLeftTab] = useState<'library' | 'media' | 'reader' | 'convert' | 'tasks'>('library');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [taskListVersion, setTaskListVersion] = useState(0);
   const [pdfJumpTrigger, setPdfJumpTrigger] = useState<{ page: number; ts: number } | undefined>(undefined);
 
   const handleJumpToPdfPage = (page: number) => {
@@ -83,6 +84,10 @@ function DashboardContent({
   function handleConversionComplete(audio: AudioFile) {
     setActiveAudio(audio);
     setIsSubtitlesOpen(true);
+  }
+
+  function handleTaskCreated(_task: Task) {
+    setTaskListVersion((version) => version + 1);
   }
 
   return (
@@ -178,18 +183,20 @@ function DashboardContent({
             </div>
              {selectedPdf && (
               <div style={{ display: leftTab === 'reader' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                <PdfReaderPane pdf={selectedPdf} jumpPageTrigger={pdfJumpTrigger} />
+                <PdfReaderPane key={selectedPdf.id} pdf={selectedPdf} jumpPageTrigger={pdfJumpTrigger} />
               </div>
             )}
             <div style={{ display: leftTab === 'convert' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
               <ConvertPane
+                key={selectedPdf?.id ?? 'no-pdf-mobile'}
                 pdf={selectedPdf}
                 onConversionComplete={handleConversionComplete}
+                onTaskCreated={handleTaskCreated}
                 onJumpToPdfPage={handleJumpToPdfPage}
               />
             </div>
             <div style={{ display: leftTab === 'tasks' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
-              <TaskManagerPane />
+              <TaskManagerPane refreshKey={taskListVersion} active={leftTab === 'tasks'} />
             </div>
           </div>
         </section>
@@ -207,8 +214,10 @@ function DashboardContent({
 
           <div className="pane-content">
             <ConvertPane
+              key={selectedPdf?.id ?? 'no-pdf-desktop'}
               pdf={selectedPdf}
               onConversionComplete={handleConversionComplete}
+              onTaskCreated={handleTaskCreated}
               onJumpToPdfPage={handleJumpToPdfPage}
             />
           </div>
@@ -236,8 +245,9 @@ export default function App() {
   const [unlocked, setUnlocked] = useState(Boolean(getToken()));
 
   const handleUnlock = () => setUnlocked(true);
-  const handleLogout = () => {
-    clearToken();
+  const handleLogout = async () => {
+    await clearToken();
+    clearLocalAppState();
     clearOfflineCaches();
     setUnlocked(false);
   };

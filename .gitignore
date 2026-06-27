@@ -11,6 +11,7 @@ storage/*
 !storage/.gitkeep
 backend/storage/*
 !backend/storage/.gitkeep
+backend/static/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/

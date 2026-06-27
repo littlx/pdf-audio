@@ -16,8 +16,8 @@ export default function AccessGate({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    setToken(token);
     try {
+      await setToken(token);
       await api('/api/pdfs');
       onUnlock();
     } catch (err) {

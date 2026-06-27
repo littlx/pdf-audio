@@ -18,6 +18,7 @@ export type Task = {
   bilingual_format: string;
   output_style: string;
   audio_mode: string;
+  custom_title?: string;
   status: string;
   stage: string;
   progress: number;

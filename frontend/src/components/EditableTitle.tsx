@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Edit2 } from 'lucide-react';
 
 type EditableTitleProps = {
@@ -18,6 +18,12 @@ export default function EditableTitle({
 }: EditableTitleProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [value, setValue] = useState(initialTitle);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setValue(initialTitle);
+    }
+  }, [initialTitle, isEditing]);
 
   const save = async () => {
     if (!value.trim() || value.trim() === initialTitle) {

@@ -20,7 +20,10 @@ router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depe
 
 @router.get("", response_model=SettingsOut)
 def read_settings(db: Session = Depends(get_db)):
-    return serialize_settings(get_settings(db))
+    try:
+        return serialize_settings(get_settings(db))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put("", response_model=SettingsOut)

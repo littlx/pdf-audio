@@ -3,8 +3,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 import asyncio
 import json
-import shutil
+from contextlib import contextmanager
 from pathlib import Path
+import shutil
+
+from redis import Redis, RedisError
 
 from app.core.config import settings
 from app.core.security import require_access_token
@@ -17,7 +20,9 @@ from app.api.schemas import OkOut, TaskCreate, TaskDetailOut, TaskOut, TaskTextU
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"], dependencies=[Depends(require_access_token)])
 
-SAFE_TEXT_EDIT_STATUSES = {"pending", "paused", "failed"}
+SAFE_TEXT_EDIT_STATUSES = {"paused", "failed"}
+TERMINAL_STATUSES = {"completed", "failed", "paused", "canceled"}
+ACTIVE_STATUSES = {"pending", "running", "canceling"}
 
 
 def get_task_or_404(db: Session, task_id: str) -> ConversionTask:
@@ -38,6 +43,48 @@ def enqueue_or_503(task_id: str) -> None:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Worker queue unavailable") from exc
 
 
+def ensure_active_capacity(db: Session) -> None:
+    active_tasks = db.query(ConversionTask).filter(ConversionTask.status.in_(list(ACTIVE_STATUSES))).count()
+    if active_tasks >= settings.max_active_tasks:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many concurrent running or pending tasks. Please wait for existing tasks to complete."
+        )
+
+
+def restore_task_state(db: Session, task: ConversionTask, snapshot: dict) -> None:
+    for key, value in snapshot.items():
+        setattr(task, key, value)
+    db.commit()
+
+
+def safe_rmtree_under(path: Path, base: Path) -> None:
+    safe_path = safe_path_under(path, base)
+    shutil.rmtree(safe_path, ignore_errors=True)
+
+
+@contextmanager
+def active_task_admission_lock():
+    redis: Redis | None = None
+    lock = None
+    try:
+        redis = Redis.from_url(settings.redis_url)
+        lock = redis.lock("pdf-audio:active-task-admission", timeout=10, blocking_timeout=5)
+        if not lock.acquire(blocking=True):
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Task admission lock unavailable")
+    except RedisError as exc:
+        if settings.app_env.lower() != "development":
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Task admission lock unavailable") from exc
+        lock = None
+    try:
+        yield
+    finally:
+        if lock and lock.owned():
+            lock.release()
+        if redis:
+            redis.close()
+
+
 @router.post("", response_model=TaskOut)
 def create(payload: TaskCreate, db: Session = Depends(get_db)):
     if payload.input_type == "page_range":
@@ -50,22 +97,17 @@ def create(payload: TaskCreate, db: Session = Depends(get_db)):
     if payload.input_type == "selected_text" and not payload.selected_text:
         raise HTTPException(status_code=400, detail="selected_text is required")
     
-    # Enforce concurrency/rate limits
-    active_tasks = db.query(ConversionTask).filter(ConversionTask.status.in_(["pending", "running"])).count()
-    if active_tasks >= 5:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many concurrent running or pending tasks. Please wait for existing tasks to complete."
-        )
-
-    task = create_task(db, payload.model_dump())
-    try:
-        enqueue_or_503(task.id)
-    except Exception as exc:
-        # Enqueue failed: remove the database entry to avoid leaving a dead pending task
-        db.delete(task)
-        db.commit()
-        raise exc
+    with active_task_admission_lock():
+        ensure_active_capacity(db)
+        task = create_task(db, payload.model_dump())
+        try:
+            enqueue_or_503(task.id)
+        except Exception as exc:
+            # Enqueue failed: remove the database entry to avoid leaving a dead pending task
+            db.delete(task)
+            db.commit()
+            raise exc
+    db.refresh(task)
     return task
 
 
@@ -94,17 +136,20 @@ def get_task(task_id: str, db: Session = Depends(get_db)):
 def update_text(task_id: str, payload: TaskTextUpdate, db: Session = Depends(get_db)):
     task = get_task_or_404(db, task_id)
     if task.status not in SAFE_TEXT_EDIT_STATUSES:
-        conflict("Task text can only be edited while pending, paused, or failed")
+        conflict("Task text can only be edited while paused or failed")
     text = payload.text
     task.edited_text = text
     db.query(BilingualSegment).filter(BilingualSegment.task_id == task_id).delete()
-    delete_artifacts(db, task.id, ["segments_done", "clip_manifest", "audio_path", "subtitle_json_path", "subtitle_vtt_path", "subtitle_srt_path"])
+    audio = db.query(AudioFile).filter(AudioFile.task_id == task_id).first()
+    if audio:
+        safe_rmtree_under(Path(settings.storage_dir) / "audios" / audio.id, Path(settings.storage_dir) / "audios")
+        db.delete(audio)
+    delete_artifacts(db, task.id, ["segments_done", "clip_manifest", "audio_id", "audio_path", "subtitle_json_path", "subtitle_vtt_path", "subtitle_srt_path"])
     
     # We clean up the entire task storage directory here because clip generation, audio merging,
     # and subtitle outputs are entirely dependent on the text segment offsets and layout structures.
     # Editing the text changes these references, invalidating all downstream clips and files.
-    task_storage = safe_path_under(Path(settings.storage_dir) / "tasks" / task.id, Path(settings.storage_dir) / "tasks")
-    shutil.rmtree(task_storage, ignore_errors=True)
+    safe_rmtree_under(Path(settings.storage_dir) / "tasks" / task.id, Path(settings.storage_dir) / "tasks")
     
     set_artifact(db, task.id, "edited_text", text)
     db.commit()
@@ -143,12 +188,27 @@ def resume_task(task_id: str, db: Session = Depends(get_db)):
     task = get_task_or_404(db, task_id)
     if task.status != "paused":
         conflict("Only paused tasks can be resumed")
-    task.pause_requested = False
-    task.cancel_requested = False
-    task.status = "pending"
-    task.error_message = None
-    db.commit()
-    enqueue_or_503(task.id)
+    with active_task_admission_lock():
+        ensure_active_capacity(db)
+        snapshot = {
+            "pause_requested": task.pause_requested,
+            "cancel_requested": task.cancel_requested,
+            "status": task.status,
+            "error_message": task.error_message,
+            "rq_job_id": task.rq_job_id,
+            "attempt": task.attempt,
+        }
+        task.pause_requested = False
+        task.cancel_requested = False
+        task.status = "pending"
+        task.error_message = None
+        db.commit()
+        try:
+            enqueue_or_503(task.id)
+        except Exception:
+            restore_task_state(db, task, snapshot)
+            raise
+    db.refresh(task)
     return task
 
 
@@ -157,14 +217,31 @@ def retry_task(task_id: str, db: Session = Depends(get_db)):
     task = get_task_or_404(db, task_id)
     if task.status not in {"failed", "paused"}:
         conflict("Only failed or paused tasks can be retried")
-    task.pause_requested = False
-    task.cancel_requested = False
-    task.status = "pending"
-    task.stage = "pending"
-    task.progress = 0
-    task.error_message = None
-    db.commit()
-    enqueue_or_503(task.id)
+    with active_task_admission_lock():
+        ensure_active_capacity(db)
+        snapshot = {
+            "pause_requested": task.pause_requested,
+            "cancel_requested": task.cancel_requested,
+            "status": task.status,
+            "stage": task.stage,
+            "progress": task.progress,
+            "error_message": task.error_message,
+            "rq_job_id": task.rq_job_id,
+            "attempt": task.attempt,
+        }
+        task.pause_requested = False
+        task.cancel_requested = False
+        task.status = "pending"
+        task.stage = "pending"
+        task.progress = 0
+        task.error_message = None
+        db.commit()
+        try:
+            enqueue_or_503(task.id)
+        except Exception:
+            restore_task_state(db, task, snapshot)
+            raise
+    db.refresh(task)
     return task
 
 
@@ -199,7 +276,7 @@ async def task_events(task_id: str):
                     last = data
                     yield f"data: {data}\n\n"
                 
-                if task_data["status"] in {"completed", "failed", "paused", "canceled"}:
+                if task_data["status"] in TERMINAL_STATUSES:
                     break
                 await asyncio.sleep(1.0)
         finally:
@@ -211,23 +288,23 @@ async def task_events(task_id: str):
 @router.delete("/{task_id}", response_model=OkOut)
 def delete_task(task_id: str, db: Session = Depends(get_db)):
     task = get_task_or_404(db, task_id)
+    if task.status not in TERMINAL_STATUSES:
+        conflict("Cancel the task and wait for it to stop before deleting it")
 
     # Delete associated AudioFile if exists
     audio = db.query(AudioFile).filter(AudioFile.task_id == task_id).first()
     if audio:
-        safe_path_under(audio.audio_path, Path(settings.storage_dir) / "audios" / audio.id)
-        shutil.rmtree(Path(settings.storage_dir) / "audios" / audio.id, ignore_errors=True)
+        safe_rmtree_under(Path(settings.storage_dir) / "audios" / audio.id, Path(settings.storage_dir) / "audios")
         db.delete(audio)
 
     # Delete segments
     db.query(BilingualSegment).filter(BilingualSegment.task_id == task_id).delete()
 
     # Delete artifacts
-    delete_artifacts(db, task.id, ["edited_text", "extracted_text", "segments_done", "clip_manifest", "audio_path", "subtitle_json_path", "subtitle_vtt_path", "subtitle_srt_path"])
+    delete_artifacts(db, task.id, ["edited_text", "extracted_text", "pages", "segments_done", "clip_manifest", "audio_id", "audio_path", "subtitle_json_path", "subtitle_vtt_path", "subtitle_srt_path"])
     
     # Delete task folder from storage
-    task_storage = safe_path_under(Path(settings.storage_dir) / "tasks" / task.id, Path(settings.storage_dir) / "tasks")
-    shutil.rmtree(task_storage, ignore_errors=True)
+    safe_rmtree_under(Path(settings.storage_dir) / "tasks" / task.id, Path(settings.storage_dir) / "tasks")
     
     db.delete(task)
     db.commit()

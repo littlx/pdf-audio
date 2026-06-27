@@ -46,13 +46,13 @@ PDF text:
 
 def _normalize_segments(data: list) -> list[dict[str, Any]]:
     normalized = []
-    for idx, item in enumerate(data, start=1):
+    for item in data:
         if not isinstance(item, dict):
             continue
         english = str(item.get("english", "")).strip()
         chinese = str(item.get("chinese", "")).strip()
         if english and chinese:
-            normalized.append({"index": int(item.get("index") or idx), "english": english, "chinese": chinese})
+            normalized.append({"index": len(normalized) + 1, "english": english, "chinese": chinese})
     if not normalized:
         raise ValueError("AI output contains no valid segments")
     return normalized

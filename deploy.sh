@@ -20,9 +20,9 @@ info "Starting native deployment compilation..."
 info "Building frontend React/Vite assets..."
 cd "$FRONTEND_DIR"
 
-if [ ! -d "node_modules" ] || [ "package.json" -nt "node_modules/.last_install" ]; then
-    info "Dependencies changed or node_modules missing. Running npm install..."
-    npm install
+if [ ! -d "node_modules" ] || [ "package-lock.json" -nt "node_modules/.last_install" ] || [ "package.json" -nt "node_modules/.last_install" ]; then
+    info "Dependencies changed or node_modules missing. Running npm ci..."
+    npm ci
     touch "node_modules/.last_install"
 else
     info "Frontend dependencies are up to date. Skipping npm install."

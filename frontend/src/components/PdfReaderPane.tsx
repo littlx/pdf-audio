@@ -245,6 +245,7 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
   // TOC Outline State
   const [outline, setOutline] = useState<OutlineItem[]>([]);
   const [showToc, setShowToc] = useState(false);
+  const [pageInput, setPageInput] = useState(String(currentPage));
 
   // Measure container width for responsive page sizing
   useEffect(() => {
@@ -330,6 +331,17 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
 
   // Sync current visible page index to backend database
   const lastSyncedPage = useRef<number>(pdf.last_preview_page || 1);
+  const isInitialScrolled = useRef(false);
+
+  useEffect(() => {
+    const initialPage = pdf.last_preview_page || 1;
+    setCurrentPage(initialPage);
+    setPageInput(String(initialPage));
+    setNumPages(0);
+    pageRefs.current = {};
+    lastSyncedPage.current = initialPage;
+    isInitialScrolled.current = false;
+  }, [pdf.id]);
   useEffect(() => {
     if (currentPage === lastSyncedPage.current) return;
 
@@ -385,7 +397,6 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
   }, [pdfDoc, loading, scale]);
 
   // Scroll to saved initial page on load
-  const isInitialScrolled = useRef(false);
   useEffect(() => {
     isInitialScrolled.current = false;
   }, [pdf.id]);
@@ -465,8 +476,6 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
     setIsAutoScaled(false);
     setScale((prev) => Math.max(prev - 0.25, 0.5));
   };
-
-  const [pageInput, setPageInput] = useState(String(currentPage));
 
   // Sync input value with current scroll page index
   useEffect(() => {
@@ -653,7 +662,7 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
                 const pNum = index + 1;
                 return (
                   <PdfPageItem
-                    key={pNum}
+                    key={`${pdf.id}-${pNum}`}
                     pageNum={pNum}
                     pdfDoc={pdfDoc}
                     scale={scale}

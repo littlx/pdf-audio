@@ -1,11 +1,47 @@
+import asyncio
 import json
+import os
 import subprocess
+import urllib.request
 from pathlib import Path
 
 import edge_tts
 
 from app.core.config import settings
 from app.core.utils import ensure_dir
+
+EDGE_TTS_TIMEOUT_SECONDS = 300
+FFMPEG_TIMEOUT_SECONDS = 300
+FFPROBE_TIMEOUT_SECONDS = 60
+NORMALIZED_SAMPLE_RATE = 24000
+NORMALIZED_CHANNELS = 1
+
+
+def _get_proxy() -> str | None:
+    # 1. Check custom configuration
+    try:
+        if settings.tts_proxy:
+            return settings.tts_proxy
+    except AttributeError:
+        pass
+
+    # 2. Check standard environment variables
+    for env_var in ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"]:
+        val = os.getenv(env_var)
+        if val:
+            return val
+
+    # 3. Check system proxy settings (especially useful on macOS)
+    try:
+        proxies = urllib.request.getproxies()
+        # Prefer https proxy, fallback to http proxy
+        proxy_url = proxies.get("https") or proxies.get("http")
+        if proxy_url:
+            return proxy_url
+    except Exception:
+        pass
+
+    return None
 
 
 def seconds_to_vtt(seconds: float) -> str:
@@ -21,8 +57,9 @@ def seconds_to_srt(seconds: float) -> str:
 
 
 async def synthesize(text: str, voice: str, output: Path, rate: str = "+0%", volume: str = "+0%") -> None:
-    communicate = edge_tts.Communicate(text=text, voice=voice, rate=rate, volume=volume)
-    await communicate.save(str(output))
+    proxy = _get_proxy()
+    communicate = edge_tts.Communicate(text=text, voice=voice, rate=rate, volume=volume, proxy=proxy)
+    await asyncio.wait_for(communicate.save(str(output)), timeout=EDGE_TTS_TIMEOUT_SECONDS)
 
 
 def ffprobe_duration(path: Path) -> float:
@@ -31,6 +68,7 @@ def ffprobe_duration(path: Path) -> float:
         check=True,
         capture_output=True,
         text=True,
+        timeout=FFPROBE_TIMEOUT_SECONDS,
     )
     return float(result.stdout.strip())
 
@@ -41,11 +79,49 @@ def silence_mp3(path: Path, duration_ms: int) -> None:
         ["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", str(duration), "-q:a", "9", "-acodec", "libmp3lame", str(path.resolve(strict=False))],
         check=True,
         capture_output=True,
+        timeout=FFMPEG_TIMEOUT_SECONDS,
     )
 
 
-def concat_mp3(files: list[Path], output: Path) -> None:
-    list_file = output.parent / "concat.txt"
+def convert_to_timeline_wav(input_path: Path, output_path: Path) -> None:
+    ensure_dir(output_path.parent)
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-i", str(input_path.resolve(strict=False)),
+            "-vn",
+            "-ac", str(NORMALIZED_CHANNELS),
+            "-ar", str(NORMALIZED_SAMPLE_RATE),
+            "-c:a", "pcm_s16le",
+            str(output_path.resolve(strict=False)),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=FFMPEG_TIMEOUT_SECONDS,
+    )
+
+
+def silence_wav(path: Path, duration_ms: int) -> None:
+    duration = max(duration_ms, 0) / 1000
+    subprocess.run(
+        [
+            "ffmpeg", "-y",
+            "-f", "lavfi",
+            "-i", f"anullsrc=r={NORMALIZED_SAMPLE_RATE}:cl=mono",
+            "-t", str(duration),
+            "-ac", str(NORMALIZED_CHANNELS),
+            "-ar", str(NORMALIZED_SAMPLE_RATE),
+            "-c:a", "pcm_s16le",
+            str(path.resolve(strict=False)),
+        ],
+        check=True,
+        capture_output=True,
+        timeout=FFMPEG_TIMEOUT_SECONDS,
+    )
+
+
+def concat_audio(files: list[Path], output: Path, codec_args: list[str] | None = None) -> None:
+    list_file = output.parent / f"{output.stem}_concat.txt"
     lines = []
     for file in files:
         safe_path = file.resolve(strict=False).as_posix().replace("'", "'\\''")
@@ -55,9 +131,17 @@ def concat_mp3(files: list[Path], output: Path) -> None:
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0",
         "-i", str(list_file.resolve(strict=False)),
-        "-codec:a", "libmp3lame", "-q:a", "4",
+        *(codec_args or ["-c", "copy"]),
         str(output.resolve(strict=False))
-    ], check=True, capture_output=True)
+    ], check=True, capture_output=True, timeout=FFMPEG_TIMEOUT_SECONDS)
+
+
+def concat_mp3(files: list[Path], output: Path) -> None:
+    concat_audio(files, output, ["-codec:a", "libmp3lame", "-q:a", "4"])
+
+
+def concat_wav(files: list[Path], output: Path) -> None:
+    concat_audio(files, output, ["-c", "copy"])
 
 
 def normalize_audio(input_path: Path, output_path: Path) -> None:
@@ -65,6 +149,7 @@ def normalize_audio(input_path: Path, output_path: Path) -> None:
         ["ffmpeg", "-y", "-i", str(input_path.resolve(strict=False)), "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", str(output_path.resolve(strict=False))],
         check=True,
         capture_output=True,
+        timeout=FFMPEG_TIMEOUT_SECONDS,
     )
 
 

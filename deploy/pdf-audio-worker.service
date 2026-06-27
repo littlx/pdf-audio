@@ -4,19 +4,21 @@ After=network.target redis-server.service pdf-audio-backend.service
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/root/py-app/pdf-audio/backend
-ExecStart=/root/py-app/pdf-audio/backend/.venv/bin/python -m app.workers.worker
+User=pdf-audio
+Group=pdf-audio
+WorkingDirectory=/opt/pdf-audio/backend
+Environment=APP_ENV=production
+Environment=PYTHONPATH=/opt/pdf-audio/backend
+Environment=PATH=/opt/pdf-audio/backend/.venv/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/etc/pdf-audio/pdf-audio.env
+ExecStart=/opt/pdf-audio/backend/.venv/bin/python -m app.workers.worker
 Restart=always
 RestartSec=5
-
-# Environment variables (Must align with backend service)
-Environment=DATABASE_URL=sqlite:///./app.db
-Environment=REDIS_URL=redis://localhost:6379/0
-Environment=OPENAI_API_KEY=your-api-key-here
-Environment=OPENAI_BASE_URL=your-api-base-url-if-needed
-# Ensure ffmpeg/ffprobe executable paths are accessible by the service
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/pdf-audio /opt/pdf-audio/storage
 
 [Install]
 WantedBy=multi-user.target

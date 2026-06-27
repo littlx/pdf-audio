@@ -15,6 +15,10 @@ class HealthOut(OkOut):
     pass
 
 
+class LoginIn(BaseModel):
+    token: str = Field(min_length=1, max_length=500)
+
+
 class PdfOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -56,10 +60,13 @@ class TaskCreate(BaseModel):
     audio_mode: Literal["bilingual", "english", "chinese"] = "bilingual"
     custom_title: str | None = Field(default=None, min_length=1, max_length=256)
 
-    @field_validator("page_expression", "selected_text")
+    @field_validator("page_expression", "selected_text", "custom_title")
     @classmethod
     def strip_optional_text(cls, value: str | None) -> str | None:
-        return value.strip() if isinstance(value, str) else value
+        if not isinstance(value, str):
+            return value
+        value = value.strip()
+        return value or None
 
     @model_validator(mode="after")
     def validate_source(self):
@@ -93,6 +100,7 @@ class TaskOut(BaseModel):
     bilingual_format: str
     output_style: str
     audio_mode: str
+    custom_title: str | None = None
     status: str
     stage: str
     progress: int
