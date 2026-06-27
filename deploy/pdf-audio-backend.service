@@ -1,0 +1,21 @@
+[Unit]
+Description=Bilingual PDF Audio - FastAPI Backend
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/py-app/pdf-audio/backend
+ExecStart=/root/py-app/pdf-audio/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8543
+Restart=always
+RestartSec=5
+
+# Environment variables
+Environment=DATABASE_URL=sqlite:///./app.db
+Environment=REDIS_URL=redis://localhost:6379/0
+# Note: Set your actual API Key here in production or load from a separate env file
+Environment=OPENAI_API_KEY=your-api-key-here
+Environment=OPENAI_BASE_URL=your-api-base-url-if-needed
+
+[Install]
+WantedBy=multi-user.target

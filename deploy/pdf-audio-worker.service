@@ -1,0 +1,22 @@
+[Unit]
+Description=Bilingual PDF Audio - RQ Worker
+After=network.target redis-server.service pdf-audio-backend.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/py-app/pdf-audio/backend
+ExecStart=/root/py-app/pdf-audio/backend/.venv/bin/python -m app.workers.worker
+Restart=always
+RestartSec=5
+
+# Environment variables (Must align with backend service)
+Environment=DATABASE_URL=sqlite:///./app.db
+Environment=REDIS_URL=redis://localhost:6379/0
+Environment=OPENAI_API_KEY=your-api-key-here
+Environment=OPENAI_BASE_URL=your-api-base-url-if-needed
+# Ensure ffmpeg/ffprobe executable paths are accessible by the service
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target
