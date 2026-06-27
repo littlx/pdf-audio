@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp, Search, Loader2 } from 'lucide-react';
+import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp, Search, Loader2, Maximize2, Check } from 'lucide-react';
 import { api } from '../api/client';
 import type { AppSettings, AudioFile, PdfFile, Task } from '../api/types';
 import { Button } from './ui/button';
@@ -96,9 +96,14 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ page_expression: pageExpression }),
       });
+      setOriginalExtractedText(res.text);
       setTextToConvert(res.text);
       setEditableText(res.text);
       setMode('text');
+      if (pdf) {
+        localStorage.removeItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`);
+      }
+      setDraftStatus('idle');
       toast(
         lang === 'zh' 
           ? '文本提取成功，已为您切换到“文本”编辑模式。' 
@@ -112,6 +117,58 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       );
     } finally {
       setIsExtracting(false);
+    }
+  };
+
+  const [originalExtractedText, setOriginalExtractedText] = useState('');
+  const [isFullscreenEditorOpen, setIsFullscreenEditorOpen] = useState(false);
+  const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  // Debounced Auto-save to localStorage
+  useEffect(() => {
+    if (mode === 'text' && pdf && textToConvert && textToConvert !== originalExtractedText) {
+      setDraftStatus('saving');
+      const timer = setTimeout(() => {
+        localStorage.setItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`, textToConvert);
+        setDraftStatus('saved');
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [textToConvert, mode, pdf, pageExpression, originalExtractedText]);
+
+  // Load draft from localStorage on document/page change
+  useEffect(() => {
+    if (mode === 'text' && pdf) {
+      const savedDraft = localStorage.getItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`);
+      if (savedDraft) {
+        setTextToConvert(savedDraft);
+        setEditableText(savedDraft);
+        setDraftStatus('saved');
+        toast(
+          lang === 'zh' ? '已自动载入未保存的本地草稿。' : 'Auto-loaded uncommitted local draft.',
+          'success'
+        );
+      }
+    }
+  }, [pdf?.id, pageExpression, mode]);
+
+  const handleRevertToOriginal = () => {
+    if (originalExtractedText) {
+      setTextToConvert(originalExtractedText);
+      setEditableText(originalExtractedText);
+      if (pdf) {
+        localStorage.removeItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`);
+      }
+      setDraftStatus('idle');
+      toast(
+        lang === 'zh' ? '已恢复至初始解析的原文并清空草稿。' : 'Reverted to original text and cleared draft.',
+        'success'
+      );
+    } else {
+      toast(
+        lang === 'zh' ? '没有可恢复的初始原文。' : 'No original text available to revert.',
+        'error'
+      );
     }
   };
 
@@ -395,8 +452,44 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             )}
           </div>
         ) : (
-          <div className="form-group">
-            <label htmlFor="raw-text-input">{t('textToConvert')}</label>
+          <div className="form-group flex flex-col gap-1.5">
+            <div className="flex justify-between items-center">
+              <label htmlFor="raw-text-input" className="mb-0 flex items-center gap-1.5 font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">
+                <span>{t('textToConvert')}</span>
+                {draftStatus === 'saving' && (
+                  <span className="text-[10px] text-muted-foreground animate-pulse font-normal lowercase">
+                    ({lang === 'zh' ? '正在保存...' : 'saving...'})
+                  </span>
+                )}
+                {draftStatus === 'saved' && (
+                  <span className="text-[10px] text-green-600 flex items-center gap-0.5 font-normal lowercase">
+                    <Check size={11} /> {lang === 'zh' ? '已存草稿' : 'autosaved'}
+                  </span>
+                )}
+              </label>
+              <div className="flex items-center gap-3">
+                {originalExtractedText && (
+                  <button
+                    type="button"
+                    onClick={handleRevertToOriginal}
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0 transition-colors"
+                    title={lang === 'zh' ? '恢复为初始 PDF 提取原文' : 'Revert to original extracted text'}
+                  >
+                    <RotateCcw size={11} />
+                    <span>{lang === 'zh' ? '恢复原文' : 'Revert'}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsFullscreenEditorOpen(true)}
+                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0"
+                >
+                  <Maximize2 size={11} />
+                  <span>{lang === 'zh' ? '全屏编辑' : 'Fullscreen'}</span>
+                </button>
+              </div>
+            </div>
+            
             <textarea
               id="raw-text-input"
               value={textToConvert}
@@ -404,13 +497,20 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 setTextToConvert(e.target.value);
                 setEditableText(e.target.value);
               }}
-              rows={4}
+              rows={12}
               placeholder={t('pasteTextPlaceholder')}
-              className="text-xs"
+              className="w-full font-sans text-xs leading-relaxed p-3 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
+              style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
             />
-            <span className="text-[10px] font-bold text-muted-foreground text-right block mt-1">
-              {textToConvert.trim().length} {t('chars')} ({t('textMinLength')})
-            </span>
+            
+            <div className="flex justify-between items-center text-[10px] text-muted-foreground font-medium mt-0.5">
+              <span>
+                {draftStatus === 'saved' && (lang === 'zh' ? '草稿已保存在本地，不怕刷新' : 'Draft saved locally')}
+              </span>
+              <span>
+                {textToConvert.trim().length} {t('chars')} ({t('textMinLength')})
+              </span>
+            </div>
           </div>
         )}
 
@@ -642,6 +742,83 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Fullscreen Rich Text Editor Modal */}
+      {isFullscreenEditorOpen && (
+        <div className="fixed inset-0 bg-[#0c0a09]/75 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+          <div className="bg-card w-full max-w-4xl h-[90vh] md:h-[80vh] rounded-xl border border-border shadow-2xl overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-border/80 flex justify-between items-center bg-muted/40 shrink-0">
+              <div className="flex flex-col gap-0.5">
+                <h3 className="text-sm font-semibold text-foreground m-0">
+                  {lang === 'zh' ? '全屏文本编辑器' : 'Fullscreen Text Editor'}
+                </h3>
+                <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                  {draftStatus === 'saving' && (
+                    <span className="animate-pulse">{lang === 'zh' ? '正在保存到本地...' : 'Saving to local...'}</span>
+                  )}
+                  {draftStatus === 'saved' && (
+                    <span className="text-green-600 flex items-center gap-0.5">
+                      <Check size={11} /> {lang === 'zh' ? '草稿已保存在本地（不怕刷新）' : 'Draft saved locally'}
+                    </span>
+                  )}
+                  {draftStatus === 'idle' && (
+                    <span>{lang === 'zh' ? '内容与本地草稿箱同步' : 'Synchronized'}</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {originalExtractedText && (
+                  <button
+                    type="button"
+                    onClick={handleRevertToOriginal}
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0 transition-colors"
+                  >
+                    <RotateCcw size={12} />
+                    <span>{lang === 'zh' ? '恢复原文' : 'Revert'}</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsFullscreenEditorOpen(false)}
+                  className="text-xs py-1 px-3 rounded border border-border hover:bg-muted text-foreground transition-colors font-medium cursor-pointer"
+                >
+                  {lang === 'zh' ? '完成编辑' : 'Done'}
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 p-4 bg-background overflow-hidden flex flex-col">
+              <textarea
+                value={textToConvert}
+                onChange={(e) => {
+                  setTextToConvert(e.target.value);
+                  setEditableText(e.target.value);
+                }}
+                placeholder={t('pasteTextPlaceholder')}
+                className="w-full h-full flex-1 font-sans text-sm leading-relaxed p-4 border border-border/80 rounded-lg bg-card focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none overflow-y-auto"
+                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+              />
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 border-t border-border/80 bg-muted/40 shrink-0 flex justify-between items-center text-xs text-muted-foreground">
+              <span>
+                {lang === 'zh' ? '支持直接编辑修改，修改会自动实时同步。' : 'Auto-saves draft to local storage'}
+              </span>
+              <div className="flex items-center gap-4 font-medium">
+                <span>
+                  {textToConvert.trim().length} {t('chars')}
+                </span>
+                <Button size="sm" onClick={() => setIsFullscreenEditorOpen(false)} className="btn-primary-gradient text-[11px] h-8 px-4">
+                  {lang === 'zh' ? '确定并返回' : 'Confirm & Close'}
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
