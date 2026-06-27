@@ -47,6 +47,9 @@ def _is_noise(line: str) -> bool:
     if re.match(r"^(references|bibliography)\b", stripped, flags=re.I):
         return True
     if len(stripped) < 2:
+        # Keep single uppercase characters (like drop caps 'W', 'T', etc.)
+        if re.match(r"^[A-Z]$", stripped):
+            return False
         return True
     return False
 
@@ -73,12 +76,19 @@ def _clean_text(text: str) -> str:
                 last_char = merged_para[-1]
                 first_char = line[0]
                 
+                # Check for drop cap merging:
+                # If the previous line is a single uppercase letter, and the current line starts with an uppercase letter,
+                # merge them WITHOUT a space (e.g., 'W' + 'HEN' -> 'WHEN').
+                is_drop_cap = len(merged_para) == 1 and merged_para.isupper() and first_char.isupper()
+                
                 # Check if either character is Chinese
                 is_chinese = (
                     ('\u4e00' <= last_char <= '\u9fa5') or 
                     ('\u4e00' <= first_char <= '\u9fa5')
                 )
-                if is_chinese:
+                if is_drop_cap:
+                    merged_para += line
+                elif is_chinese:
                     merged_para += line
                 else:
                     merged_para += " " + line

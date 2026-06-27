@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp, Search, Loader2, Maximize2, Check } from 'lucide-react';
+import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp, Search, Loader2, Maximize2, Check, Sparkles } from 'lucide-react';
 import { api } from '../api/client';
 import type { AppSettings, AudioFile, PdfFile, Task } from '../api/types';
 import { Button } from './ui/button';
@@ -209,9 +209,14 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         const curr = lines[i];
         const lastCharOfPrev = prev.slice(-1);
         const firstCharOfCurr = curr.charAt(0);
-        // Smart check: If either the last character of previous line or the first character of current line is Chinese, do not add a space.
+        
+        // Check for drop cap merging (e.g., 'W' + 'HEN' -> 'WHEN')
+        const isDropCap = prev.length === 1 && /^[A-Z]$/.test(prev) && /^[A-Z]$/.test(firstCharOfCurr);
         const isChinese = /[\u4e00-\u9fa5]/.test(lastCharOfPrev) || /[\u4e00-\u9fa5]/.test(firstCharOfCurr);
-        if (isChinese) {
+        
+        if (isDropCap) {
+          merged += curr;
+        } else if (isChinese) {
           merged += curr;
         } else {
           merged += ' ' + curr;
@@ -249,6 +254,103 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       textarea.focus();
       textarea.setSelectionRange(start, start + merged.length);
     }, 50);
+  };
+
+  const handleSmartMergeParagraphs = (isFullscreen: boolean) => {
+    const textarea = isFullscreen ? fullscreenTextareaRef.current : normalTextareaRef.current;
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    
+    let textToFormat = '';
+    let isEntireDoc = false;
+    
+    if (start === end) {
+      // No selection: format the entire document
+      textToFormat = textToConvert;
+      isEntireDoc = true;
+    } else {
+      // Format only selection
+      textToFormat = textToConvert.substring(start, end);
+    }
+    
+    // Apply smart formatting algorithm
+    // 1. Handle hyphenated word wraps
+    let processed = textToFormat.replace(/(\w+)-\r?\n\s*(\w+)/g, '$1$2');
+    
+    // 2. Split by double newlines (paragraphs)
+    const paragraphs = processed.split(/\n\s*\n/);
+    const cleanedParagraphs = paragraphs.map(para => {
+      const lines = para.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      if (lines.length === 0) return '';
+      
+      let mergedPara = '';
+      for (let i = 0; i < lines.length; i++) {
+        if (i === 0) {
+          mergedPara = lines[i];
+        } else {
+          const prev = lines[i - 1];
+          const curr = lines[i];
+          const lastCharOfPrev = prev.slice(-1);
+          const firstCharOfCurr = curr.charAt(0);
+          
+          // Check for drop cap merging (e.g., 'W' + 'HEN' -> 'WHEN')
+          const isDropCap = prev.length === 1 && /^[A-Z]$/.test(prev) && /^[A-Z]$/.test(firstCharOfCurr);
+          const isChinese = /[\u4e00-\u9fa5]/.test(lastCharOfPrev) || /[\u4e00-\u9fa5]/.test(firstCharOfCurr);
+          
+          if (isDropCap) {
+            mergedPara += curr;
+          } else if (isChinese) {
+            mergedPara += curr;
+          } else {
+            mergedPara += ' ' + curr;
+          }
+        }
+      }
+      return mergedPara;
+    }).filter(Boolean);
+    
+    const formatted = cleanedParagraphs.join('\n\n');
+    
+    // Apply replacement via native execCommand to keep Undo history
+    textarea.focus();
+    if (isEntireDoc) {
+      textarea.select();
+    }
+    
+    let success = false;
+    try {
+      success = document.execCommand('insertText', false, formatted);
+    } catch (e) {
+      console.warn('execCommand insertText failed in smart merge:', e);
+    }
+    
+    if (!success) {
+      if (isEntireDoc) {
+        setTextToConvert(formatted);
+        setEditableText(formatted);
+      } else {
+        const newText = textToConvert.substring(0, start) + formatted + textToConvert.substring(end);
+        setTextToConvert(newText);
+        setEditableText(newText);
+      }
+    }
+    
+    toast(
+      lang === 'zh' 
+        ? (isEntireDoc ? '已成功对全文完成智能排版。' : '已成功对选中内容完成智能段落合并。')
+        : (isEntireDoc ? 'Successfully applied smart merge to entire text.' : 'Successfully applied smart merge to selection.'),
+      'success'
+    );
+    
+    // Re-select formatted text
+    if (!isEntireDoc) {
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start, start + formatted.length);
+      }, 50);
+    }
   };
 
   // Listen to Escape key globally to close fullscreen editor
@@ -582,15 +684,6 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 )}
                 <button
                   type="button"
-                  onClick={() => handleMergeSelectedLines(false)}
-                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0 transition-colors"
-                  title={lang === 'zh' ? '将选中的多行文本合并为一行' : 'Merge selected lines into one line'}
-                >
-                  <FileText size={11} />
-                  <span>{lang === 'zh' ? '合并选中行' : 'Merge Lines'}</span>
-                </button>
-                <button
-                  type="button"
                   onClick={() => setIsFullscreenEditorOpen(true)}
                   className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0"
                 >
@@ -900,6 +993,15 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 >
                   <FileText size={12} />
                   <span>{lang === 'zh' ? '合并选中行' : 'Merge Lines'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSmartMergeParagraphs(true)}
+                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0 transition-colors"
+                  title={lang === 'zh' ? '合并段落中的多余换行（未选中时整理全文）' : 'Merge newlines inside paragraphs (formats entire text if no selection)'}
+                >
+                  <Sparkles size={12} />
+                  <span>{lang === 'zh' ? '智能排版' : 'Smart Format'}</span>
                 </button>
                 <button
                   type="button"
