@@ -51,7 +51,13 @@ def concat_mp3(files: list[Path], output: Path) -> None:
         safe_path = file.resolve(strict=False).as_posix().replace("'", "'\\''")
         lines.append(f"file '{safe_path}'\n")
     list_file.write_text("".join(lines), encoding="utf-8")
-    subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(list_file.resolve(strict=False)), "-c", "copy", str(output.resolve(strict=False))], check=True, capture_output=True)
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0",
+        "-i", str(list_file.resolve(strict=False)),
+        "-codec:a", "libmp3lame", "-q:a", "4",
+        str(output.resolve(strict=False))
+    ], check=True, capture_output=True)
 
 
 def normalize_audio(input_path: Path, output_path: Path) -> None:
