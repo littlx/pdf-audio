@@ -41,7 +41,7 @@ function getStageLabel(stage: string, lang: string): string {
 
 export default function TaskManagerPane() {
   const { t, lang } = useT();
-  const { toast } = useToast();
+  const { toast, confirm } = useToast();
   const { activeAudio, setActiveAudio, isPlaying, togglePlay } = usePlayer();
 
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -97,7 +97,8 @@ export default function TaskManagerPane() {
   }
 
   async function deleteTask(taskId: string) {
-    if (!window.confirm(t('deleteConfirmTask') || '确定要删除此任务吗？关联的音频文件也会被清理。')) {
+    const ok = await confirm(t('deleteConfirmTask'));
+    if (!ok) {
       return;
     }
     try {
