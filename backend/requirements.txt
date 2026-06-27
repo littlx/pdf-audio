@@ -22,7 +22,6 @@ propcache==0.5.2
 pydantic==2.13.4
 pydantic-settings==2.7.0
 pydantic_core==2.46.4
-pydub==0.25.1
 PyMuPDF==1.24.14
 pytest==8.3.4
 python-dotenv==1.2.2
@@ -32,7 +31,6 @@ redis==5.2.1
 rq==2.0.0
 SQLAlchemy==2.0.36
 starlette==0.41.3
-tabulate==0.10.0
 typing-inspection==0.4.2
 typing_extensions==4.15.0
 uvicorn==0.32.1

@@ -43,8 +43,6 @@ def _is_noise(line: str) -> bool:
     stripped = line.strip()
     if not stripped:
         return True
-    if re.fullmatch(r"\d+", stripped):
-        return True
     if re.match(r"^(references|bibliography)\b", stripped, flags=re.I):
         return True
     if len(stripped) < 2:
@@ -92,18 +90,17 @@ def extract_text_from_pdf(pdf_path: str, page_expression: str, total_pages: int)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    doc = fitz.open(Path(pdf_path))
-    pieces = []
-    stop_at_references = False
-    for page_number in pages:
-        page = doc.load_page(page_number - 1)
-        text = _extract_page_text(page)
-        if re.search(r"^\s*(references|bibliography)\s*$", text, flags=re.I | re.M):
-            stop_at_references = True
-        if stop_at_references:
-            continue
-        pieces.append(text)
-    doc.close()
+    with fitz.open(Path(pdf_path)) as doc:
+        pieces = []
+        stop_at_references = False
+        for page_number in pages:
+            page = doc.load_page(page_number - 1)
+            text = _extract_page_text(page)
+            if re.search(r"^\s*(references|bibliography)\s*$", text, flags=re.I | re.M):
+                stop_at_references = True
+            if stop_at_references:
+                continue
+            pieces.append(text)
 
     cleaned = _clean_text("\n\n".join(pieces))
     if len(cleaned) < 80:

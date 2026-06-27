@@ -15,6 +15,8 @@ class HealthOut(OkOut):
 
 
 class PdfOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     original_name: str
     file_size: int
@@ -71,6 +73,8 @@ class TaskTextUpdate(BaseModel):
 
 
 class TaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     pdf_id: str | None
     source_pdf_name: str | None
@@ -97,11 +101,13 @@ class TaskDetailOut(TaskOut):
 
 
 class AudioOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     task_id: str | None
     pdf_id: str | None = None
     title: str
-    source_pdf_name: str | None
+    source_pdf_name: str | None = Field(default=None, validation_alias="source_pdf_name_computed")
     page_expression: str | None
     audio_mode: str
     duration: float | None

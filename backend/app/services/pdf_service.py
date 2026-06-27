@@ -36,18 +36,18 @@ def outline_to_json(doc: fitz.Document) -> str:
 
 def inspect_pdf(path: Path) -> tuple[int, str | None, str]:
     try:
-        doc = fitz.open(path)
+        with fitz.open(path) as doc:
+            if doc.needs_pass:
+                raise HTTPException(status_code=400, detail="Encrypted PDFs are not supported")
+            page_count = doc.page_count
+            metadata = doc.metadata or {}
+            author = metadata.get("author") or None
+            outline = outline_to_json(doc)
+            return page_count, author, outline
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Cannot open PDF: {exc}") from exc
-    if doc.needs_pass:
-        doc.close()
-        raise HTTPException(status_code=400, detail="Encrypted PDFs are not supported")
-    page_count = doc.page_count
-    metadata = doc.metadata or {}
-    author = metadata.get("author") or None
-    outline = outline_to_json(doc)
-    doc.close()
-    return page_count, author, outline
 
 
 async def save_uploaded_pdf(db: Session, file: UploadFile) -> PdfFile:
@@ -113,11 +113,40 @@ def delete_pdf_file(db: Session, pdf_id: str) -> None:
     pdf = db.get(PdfFile, pdf_id)
     if not pdf:
         raise HTTPException(status_code=404, detail="PDF not found")
+    
+    from app.db.models import AudioFile, ConversionTask
+    # 1. Clean up associated audio files (disk + DB)
+    audios = db.query(AudioFile).filter(AudioFile.pdf_id == pdf_id).all()
+    for audio in audios:
+        try:
+            audio_dir = Path(settings.storage_dir) / "audios" / audio.id
+            shutil.rmtree(audio_dir, ignore_errors=True)
+        except Exception:
+            pass
+        db.delete(audio)
+
+    # 2. Clean up associated conversion tasks (disk + DB)
+    tasks = db.query(ConversionTask).filter(ConversionTask.pdf_id == pdf_id).all()
+    for task in tasks:
+        try:
+            task_dir = Path(settings.storage_dir) / "tasks" / task.id
+            shutil.rmtree(task_dir, ignore_errors=True)
+        except Exception:
+            pass
+        db.delete(task)
+
+    # 3. Clean up the PDF file itself
     expected_dir = Path(settings.storage_dir) / "pdfs" / pdf_id
-    path = safe_path_under(pdf.file_path, expected_dir)
     try:
+        path = safe_path_under(pdf.file_path, expected_dir)
         path.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+    try:
         shutil.rmtree(expected_dir, ignore_errors=True)
-    finally:
-        db.delete(pdf)
-        db.commit()
+    except Exception:
+        pass
+
+    db.delete(pdf)
+    db.commit()

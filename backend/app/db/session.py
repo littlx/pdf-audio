@@ -22,6 +22,17 @@ def set_sqlite_pragmas(dbapi_connection, connection_record):
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+from contextlib import contextmanager
+
+@contextmanager
+def db_session():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 class Base(DeclarativeBase):
     pass
 

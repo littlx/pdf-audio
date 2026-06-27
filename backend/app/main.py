@@ -1,5 +1,12 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -57,7 +64,7 @@ if static_dir.exists():
 
     @app.get("/{full_path:path}")
     def serve_spa(full_path: str):
-        if full_path.startswith("api/"):
+        if full_path.startswith("api/") or full_path in {"docs", "redoc", "openapi.json"}:
             raise HTTPException(status_code=404, detail="Not found")
         target = static_dir / full_path
         if full_path in public_files and target.exists():

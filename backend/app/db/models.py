@@ -4,6 +4,37 @@ from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Te
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.utils import utcnow
 from app.db.session import Base
+from enum import Enum
+
+class TaskStage(str, Enum):
+    PENDING = "pending"
+    EXTRACTING_TEXT = "extracting_text"
+    TEXT_READY = "text_ready"
+    GENERATING_BILINGUAL_TEXT = "generating_bilingual_text"
+    BILINGUAL_TEXT_READY = "bilingual_text_ready"
+    GENERATING_TTS_CLIPS = "generating_tts_clips"
+    CLIPS_READY = "clips_ready"
+    MERGING_AUDIO = "merging_audio"
+    NORMALIZING_AUDIO = "normalizing_audio"
+    GENERATING_SUBTITLES = "generating_subtitles"
+    COMPLETED = "completed"
+    CANCELED = "canceled"
+
+
+STAGE_PROGRESS = {
+    TaskStage.PENDING: 0,
+    TaskStage.EXTRACTING_TEXT: 10,
+    TaskStage.TEXT_READY: 25,
+    TaskStage.GENERATING_BILINGUAL_TEXT: 30,
+    TaskStage.BILINGUAL_TEXT_READY: 40,
+    TaskStage.GENERATING_TTS_CLIPS: 45,
+    TaskStage.CLIPS_READY: 72,
+    TaskStage.MERGING_AUDIO: 75,
+    TaskStage.NORMALIZING_AUDIO: 85,
+    TaskStage.GENERATING_SUBTITLES: 92,
+    TaskStage.COMPLETED: 100,
+    TaskStage.CANCELED: 100,
+}
 
 
 class PdfFile(Base):
@@ -84,6 +115,26 @@ class AudioFile(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     pdf: Mapped[PdfFile] = relationship()
+
+    @property
+    def source_pdf_name_computed(self) -> str | None:
+        return self.pdf.original_name if self.pdf else self.source_pdf_name
+
+    @property
+    def audio_url(self) -> str:
+        return f"/api/audios/{self.id}/file"
+
+    @property
+    def subtitle_json_url(self) -> str:
+        return f"/api/audios/{self.id}/subtitles.json"
+
+    @property
+    def subtitle_vtt_url(self) -> str:
+        return f"/api/audios/{self.id}/subtitles.vtt"
+
+    @property
+    def subtitle_srt_url(self) -> str:
+        return f"/api/audios/{self.id}/subtitles.srt"
 
 
 class PlaybackRecord(Base):

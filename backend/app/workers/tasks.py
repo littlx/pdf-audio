@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.utils import ensure_dir, new_id, utcnow
-from app.db.models import AudioFile, BilingualSegment, ConversionTask, PdfFile
+from app.db.models import AudioFile, BilingualSegment, ConversionTask, PdfFile, TaskStage, STAGE_PROGRESS
 from app.db.session import SessionLocal
 from app.services.ai_service import generate_bilingual_segments
 from app.services.artifact_service import get_artifact, get_json_artifact, path_exists_artifact, set_artifact
-from app.services.settings_service import get_settings
+from app.services.settings_service import get_settings, tts_params
 from app.services.text_extraction import extract_text_from_pdf, parse_page_expression
 from app.services.tts_service import audio_dir, concat_mp3, ffprobe_duration, normalize_audio, silence_mp3, synthesize, task_dir, write_subtitles
 
@@ -36,7 +36,7 @@ def enqueue_task(task_id: str) -> None:
         if "already exists" in str(exc).lower():
             logger.info("Conversion task %s is already enqueued", task_id)
             return
-        if not settings.worker_fallback_to_thread:
+        if not (settings.worker_fallback_to_thread and settings.app_env.lower() == "development"):
             logger.exception("Failed to enqueue conversion task %s", task_id)
             raise
         logger.exception("Failed to enqueue conversion task %s; running in-process fallback thread", task_id)
@@ -92,7 +92,7 @@ def _ensure_text(db: Session, task: ConversionTask) -> str:
     existing = get_artifact(db, task.id, "edited_text") or get_artifact(db, task.id, "extracted_text")
     if existing:
         return existing
-    update_task(db, task, "running", "extracting_text", 10)
+    update_task(db, task, "running", TaskStage.EXTRACTING_TEXT, STAGE_PROGRESS[TaskStage.EXTRACTING_TEXT])
     if task.input_type == "selected_text":
         text = (task.selected_text or "").strip()
         if len(text) < 20:
@@ -111,12 +111,12 @@ def _ensure_text(db: Session, task: ConversionTask) -> str:
     return text
 
 
-def _ensure_segments(db: Session, task: ConversionTask, text: str) -> list[BilingualSegment]:
+async def _ensure_segments(db: Session, task: ConversionTask, text: str) -> list[BilingualSegment]:
     existing = db.query(BilingualSegment).filter(BilingualSegment.task_id == task.id).order_by(BilingualSegment.segment_index).all()
     if existing:
         return existing
-    update_task(db, task, "running", "generating_bilingual_text", 30)
-    data = asyncio.run(generate_bilingual_segments(db, text, task.bilingual_format, task.output_style))
+    update_task(db, task, "running", TaskStage.GENERATING_BILINGUAL_TEXT, STAGE_PROGRESS[TaskStage.GENERATING_BILINGUAL_TEXT])
+    data = await generate_bilingual_segments(db, text, task.bilingual_format, task.output_style)
     rows = []
     for item in data:
         row = BilingualSegment(
@@ -143,29 +143,32 @@ def _clip_items(segments: list[BilingualSegment], audio_mode: str) -> list[tuple
     return items
 
 
-def _ensure_clips(db: Session, task: ConversionTask, segments: list[BilingualSegment]) -> list[dict]:
+async def _ensure_clips(db: Session, task: ConversionTask, segments: list[BilingualSegment]) -> list[dict]:
     manifest = get_json_artifact(db, task.id, "clip_manifest") or []
     done = {item["key"]: item for item in manifest if Path(item["path"]).exists()}
     cfg = get_settings(db)
     tmp = ensure_dir(task_dir(task.id) / "clips")
     items = _clip_items(segments, task.audio_mode)
     total = max(len(items), 1)
-    for idx, (segment_index, lang, text) in enumerate(items, start=1):
-        check_control(db, task)
-        key = f"{segment_index:04d}_{lang}"
-        if key in done:
-            continue
-        update_task(db, task, "running", "generating_tts_clips", 45 + int(idx / total * 25))
-        voice = cfg["english_voice"] if lang == "english" else cfg["chinese_voice"]
-        rate = cfg["english_rate"] if lang == "english" else cfg["chinese_rate"]
-        volume = cfg["english_volume"] if lang == "english" else cfg["chinese_volume"]
-        path = tmp / f"{key}.mp3"
-        asyncio.run(synthesize(text, voice, path, rate=rate, volume=volume))
-        duration = ffprobe_duration(path)
-        done[key] = {"key": key, "segment_index": segment_index, "lang": lang, "text": text, "path": str(path), "duration": duration}
-        set_artifact(db, task.id, "clip_manifest", list(done.values()))
-    ordered = [done[f"{segment_index:04d}_{lang}"] for segment_index, lang, _ in items if f"{segment_index:04d}_{lang}" in done]
-    set_artifact(db, task.id, "clip_manifest", ordered)
+    try:
+        for idx, (segment_index, lang, text) in enumerate(items, start=1):
+            check_control(db, task)
+            key = f"{segment_index:04d}_{lang}"
+            if key in done:
+                continue
+            update_task(db, task, "running", TaskStage.GENERATING_TTS_CLIPS, STAGE_PROGRESS[TaskStage.GENERATING_TTS_CLIPS] + int(idx / total * 25))
+            voice, rate, volume = tts_params(cfg, lang)
+            path = tmp / f"{key}.mp3"
+            await synthesize(text, voice, path, rate=rate, volume=volume)
+            duration = ffprobe_duration(path)
+            done[key] = {"key": key, "segment_index": segment_index, "lang": lang, "text": text, "path": str(path), "duration": duration}
+            
+            # Periodic batch write for safety
+            if idx % 10 == 0:
+                set_artifact(db, task.id, "clip_manifest", list(done.values()))
+    finally:
+        ordered = [done[f"{segment_index:04d}_{lang}"] for segment_index, lang, _ in items if f"{segment_index:04d}_{lang}" in done]
+        set_artifact(db, task.id, "clip_manifest", ordered)
     return ordered
 
 
@@ -174,7 +177,7 @@ def _ensure_audio_and_subtitles(db: Session, task: ConversionTask, clips: list[d
     if existing_audio and Path(existing_audio.audio_path).exists():
         return existing_audio
 
-    update_task(db, task, "running", "merging_audio", 75)
+    update_task(db, task, "running", TaskStage.MERGING_AUDIO, STAGE_PROGRESS[TaskStage.MERGING_AUDIO])
     audio_id = new_id("audio")
     out_dir = audio_dir(audio_id)
     cfg = get_settings(db)
@@ -186,6 +189,10 @@ def _ensure_audio_and_subtitles(db: Session, task: ConversionTask, clips: list[d
         silence_mp3(lang_silence, lang_pause)
     if not seg_silence.exists():
         silence_mp3(seg_silence, seg_pause)
+
+    # Cache duration checks for the two silence files
+    lang_dur = ffprobe_duration(lang_silence)
+    seg_dur = ffprobe_duration(seg_silence)
 
     concat_files: list[Path] = []
     subtitle_entries = []
@@ -201,15 +208,15 @@ def _ensure_audio_and_subtitles(db: Session, task: ConversionTask, clips: list[d
         if next_clip:
             silence = seg_silence if next_clip["segment_index"] != clip["segment_index"] else lang_silence
             concat_files.append(silence)
-            current += ffprobe_duration(silence)
+            current += seg_dur if next_clip["segment_index"] != clip["segment_index"] else lang_dur
 
     merged = task_dir(task.id) / "merged.mp3"
     normalized = out_dir / "final.mp3"
     concat_mp3(concat_files, merged)
-    update_task(db, task, "running", "normalizing_audio", 85)
+    update_task(db, task, "running", TaskStage.NORMALIZING_AUDIO, STAGE_PROGRESS[TaskStage.NORMALIZING_AUDIO])
     normalize_audio(merged, normalized)
     duration = ffprobe_duration(normalized)
-    update_task(db, task, "running", "generating_subtitles", 92)
+    update_task(db, task, "running", TaskStage.GENERATING_SUBTITLES, STAGE_PROGRESS[TaskStage.GENERATING_SUBTITLES])
     vtt, srt, json_path = write_subtitles(subtitle_entries, out_dir)
 
     audio = AudioFile(
@@ -233,7 +240,7 @@ def _ensure_audio_and_subtitles(db: Session, task: ConversionTask, clips: list[d
     return audio
 
 
-def run_conversion_task(task_id: str) -> None:
+async def async_run_conversion_task(task_id: str) -> None:
     db = SessionLocal()
     try:
         task = db.get(ConversionTask, task_id)
@@ -242,32 +249,34 @@ def run_conversion_task(task_id: str) -> None:
         if task.status == "running":
             return
         if task.cancel_requested or task.status == "canceled":
-            update_task(db, task, "canceled", "canceled", task.progress or 0)
+            update_task(db, task, "canceled", TaskStage.CANCELED, task.progress or 0)
             return
         task.pause_requested = False
-        update_task(db, task, "running", task.stage or "pending", task.progress or 0)
+        update_task(db, task, "running", task.stage or TaskStage.PENDING, task.progress or 0)
         check_control(db, task)
         text = _ensure_text(db, task)
-        update_task(db, task, "running", "text_ready", 25)
+        update_task(db, task, "running", TaskStage.TEXT_READY, STAGE_PROGRESS[TaskStage.TEXT_READY])
         check_control(db, task)
         text = task.edited_text or get_artifact(db, task.id, "edited_text") or text
-        segments = _ensure_segments(db, task, text)
-        update_task(db, task, "running", "bilingual_text_ready", 40)
+        segments = await _ensure_segments(db, task, text)
+        update_task(db, task, "running", TaskStage.BILINGUAL_TEXT_READY, STAGE_PROGRESS[TaskStage.BILINGUAL_TEXT_READY])
         check_control(db, task)
-        clips = _ensure_clips(db, task, segments)
-        update_task(db, task, "running", "clips_ready", 72)
+        clips = await _ensure_clips(db, task, segments)
+        update_task(db, task, "running", TaskStage.CLIPS_READY, STAGE_PROGRESS[TaskStage.CLIPS_READY])
         check_control(db, task)
         audio = _ensure_audio_and_subtitles(db, task, clips)
         task.completed_at = utcnow()
-        update_task(db, task, "completed", "completed", 100)
-    except RuntimeError as exc:
-        if str(exc) not in {"Task paused", "Task canceled"}:
+        update_task(db, task, "completed", TaskStage.COMPLETED, STAGE_PROGRESS[TaskStage.COMPLETED])
+    except Exception as exc:
+        if isinstance(exc, RuntimeError) and str(exc) in {"Task paused", "Task canceled"}:
+            pass
+        else:
             task = db.get(ConversionTask, task_id)
             if task:
                 update_task(db, task, "failed", task.stage, task.progress, str(exc))
-    except Exception as exc:
-        task = db.get(ConversionTask, task_id)
-        if task:
-            update_task(db, task, "failed", task.stage, task.progress, str(exc))
     finally:
         db.close()
+
+
+def run_conversion_task(task_id: str) -> None:
+    asyncio.run(async_run_conversion_task(task_id))

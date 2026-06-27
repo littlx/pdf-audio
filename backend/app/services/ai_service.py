@@ -44,16 +44,7 @@ PDF text:
 """
 
 
-def extract_json_array(content: str) -> list[dict[str, Any]]:
-    try:
-        data = json.loads(content)
-    except json.JSONDecodeError:
-        match = re.search(r"\[[\s\S]*\]", content)
-        if not match:
-            raise
-        data = json.loads(match.group(0))
-    if not isinstance(data, list):
-        raise ValueError("AI output must be a JSON array")
+def _normalize_segments(data: list) -> list[dict[str, Any]]:
     normalized = []
     for idx, item in enumerate(data, start=1):
         if not isinstance(item, dict):
@@ -67,26 +58,32 @@ def extract_json_array(content: str) -> list[dict[str, Any]]:
     return normalized
 
 
-async def repair_json_with_ai(db: Session, bad_content: str) -> list[dict[str, Any]]:
-    cfg = get_settings(db)
-    api_key = cfg.get("ai_api_key")
-    base_url = str(cfg.get("ai_base_url") or "").rstrip("/")
-    model = cfg.get("ai_model") or "deepseek-v4-flash"
-    if not api_key:
-        raise ValueError("AI API key is not configured")
-    prompt = "Repair the following content into a valid JSON array. Each item must include index, english, chinese. Output JSON only.\n\n" + bad_content
-    async with httpx.AsyncClient(timeout=120) as client:
-        response = await client.post(
-            f"{base_url}/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0},
-        )
-        response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
-    return extract_json_array(content)
+def extract_json_array(content: str) -> list[dict[str, Any]]:
+    try:
+        data = json.loads(content)
+        if isinstance(data, list):
+            return _normalize_segments(data)
+    except json.JSONDecodeError:
+        pass
+
+    start_indices = [i for i, char in enumerate(content) if char == '[']
+    end_indices = [i for i, char in enumerate(content) if char == ']']
+    
+    for start in start_indices:
+        for end in reversed(end_indices):
+            if end > start:
+                try:
+                    candidate = content[start:end+1]
+                    data = json.loads(candidate)
+                    if isinstance(data, list):
+                        return _normalize_segments(data)
+                except json.JSONDecodeError:
+                    continue
+    
+    raise ValueError("AI output contains no valid JSON array")
 
 
-async def generate_bilingual_segments(db: Session, text: str, bilingual_format: str, output_style: str) -> list[dict[str, Any]]:
+async def _call_chat_completion(db: Session, messages: list[dict[str, str]], temperature: float, timeout: float = 180.0) -> str:
     cfg = get_settings(db)
     api_key = cfg.get("ai_api_key")
     base_url = str(cfg.get("ai_base_url") or "").rstrip("/")
@@ -95,19 +92,29 @@ async def generate_bilingual_segments(db: Session, text: str, bilingual_format: 
         raise ValueError("AI API key is not configured")
     if not base_url:
         raise ValueError("AI Base URL is not configured")
-
-    async with httpx.AsyncClient(timeout=180) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         response = await client.post(
             f"{base_url}/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}"},
             json={
                 "model": model,
-                "messages": [{"role": "user", "content": build_prompt(text, bilingual_format, output_style)}],
-                "temperature": 0.2,
+                "messages": messages,
+                "temperature": temperature,
             },
         )
         response.raise_for_status()
-        content = response.json()["choices"][0]["message"]["content"]
+        return response.json()["choices"][0]["message"]["content"]
+
+
+async def repair_json_with_ai(db: Session, bad_content: str) -> list[dict[str, Any]]:
+    prompt = "Repair the following content into a valid JSON array. Each item must include index, english, chinese. Output JSON only.\n\n" + bad_content
+    content = await _call_chat_completion(db, [{"role": "user", "content": prompt}], temperature=0, timeout=120)
+    return extract_json_array(content)
+
+
+async def generate_bilingual_segments(db: Session, text: str, bilingual_format: str, output_style: str) -> list[dict[str, Any]]:
+    prompt = build_prompt(text, bilingual_format, output_style)
+    content = await _call_chat_completion(db, [{"role": "user", "content": prompt}], temperature=0.2, timeout=180)
     try:
         return extract_json_array(content)
     except Exception:

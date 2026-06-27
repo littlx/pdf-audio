@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     cors_origins: str = Field(default="http://localhost:8000,http://localhost:5173", alias="CORS_ORIGINS")
     worker_fallback_to_thread: bool = Field(default=True, alias="WORKER_FALLBACK_TO_THREAD")
     worker_mode: str = Field(default="simple", alias="WORKER_MODE")
+    ai_api_key: str | None = Field(default=None, alias="AI_API_KEY")
 
     model_config = SettingsConfigDict(env_file=(PROJECT_ROOT / ".env", BACKEND_ROOT / ".env"), extra="ignore")
 
