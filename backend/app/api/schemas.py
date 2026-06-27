@@ -46,6 +46,7 @@ class TaskCreate(BaseModel):
     bilingual_format: Literal["sentence_pair", "paragraph_pair"] | None = None
     output_style: Literal["faithful", "plain_explanation", "child_friendly", "exam_english", "business_english"] | None = None
     audio_mode: Literal["bilingual", "english", "chinese"] = "bilingual"
+    custom_title: str | None = Field(default=None, min_length=1, max_length=256)
 
     @field_validator("page_expression", "selected_text")
     @classmethod

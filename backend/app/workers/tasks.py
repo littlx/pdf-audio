@@ -79,6 +79,7 @@ def create_task(db: Session, payload: dict) -> ConversionTask:
         ai_model=cfg.get("ai_model") or "deepseek-v4-flash",
         status="pending",
         stage="pending",
+        custom_title=payload.get("custom_title"),
     )
     if pdf and task.page_expression:
         task.page_count = len(parse_page_expression(task.page_expression, pdf.page_count))
@@ -223,7 +224,7 @@ def _ensure_audio_and_subtitles(db: Session, task: ConversionTask, clips: list[d
         id=audio_id,
         task_id=task.id,
         pdf_id=task.pdf_id,
-        title=f"{task.source_pdf_name or 'Selected text'} - {task.page_expression or 'Selection'}",
+        title=task.custom_title or f"{task.source_pdf_name or 'Selected text'} - {task.page_expression or 'Selection'}",
         source_pdf_name=task.source_pdf_name,
         page_expression=task.page_expression,
         audio_mode=task.audio_mode,

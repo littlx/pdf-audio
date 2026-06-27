@@ -81,6 +81,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   const [error, setError] = useState('');
   const [completedAudio, setCompletedAudio] = useState<AudioFile | null>(null);
   const [showSegments, setShowSegments] = useState(false);
+  const [customTitle, setCustomTitle] = useState('');
   const notifiedTaskId = useRef<string | null>(null);
 
   const steps = lang === 'zh' ? [
@@ -148,8 +149,8 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
 
     const payload = mode === 'text'
-      ? { pdf_id: pdf?.id, input_type: 'selected_text', selected_text: textToConvert, bilingual_format: format, output_style: style, audio_mode: audioMode }
-      : { pdf_id: pdf!.id, input_type: 'page_range', page_expression: pageExpression, bilingual_format: format, output_style: style, audio_mode: audioMode };
+      ? { pdf_id: pdf?.id, input_type: 'selected_text', selected_text: textToConvert, bilingual_format: format, output_style: style, audio_mode: audioMode, custom_title: customTitle.trim() || undefined }
+      : { pdf_id: pdf!.id, input_type: 'page_range', page_expression: pageExpression, bilingual_format: format, output_style: style, audio_mode: audioMode, custom_title: customTitle.trim() || undefined };
 
     try {
       const created = await api<Task>('/api/tasks', { method: 'POST', body: JSON.stringify(payload) });
@@ -343,6 +344,17 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             </span>
           </div>
         )}
+
+        <div className="form-group">
+          <label htmlFor="custom-title-input">{t('audioName') || '音频名称'}</label>
+          <input
+            id="custom-title-input"
+            value={customTitle}
+            onChange={(e) => setCustomTitle(e.target.value)}
+            placeholder={t('audioNamePlaceholder') || '输入生成音频的自定义名称（可选）'}
+            className="text-xs"
+          />
+        </div>
 
         <div className="grid grid-cols-3 gap-2">
           <div className="form-group">
