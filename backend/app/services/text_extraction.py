@@ -67,7 +67,9 @@ def _extract_page_text(page: fitz.Page) -> str:
     body_blocks = []
     for block in blocks:
         x0, y0, x1, y1, text, *_ = block
-        if y0 < height * 0.06 or y1 > height * 0.94:
+        is_header = y1 < height * 0.06
+        is_footer = y0 > height * 0.94
+        if is_header or is_footer:
             continue
         if not text.strip():
             continue
