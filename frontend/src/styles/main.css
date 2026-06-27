@@ -373,19 +373,74 @@ html.dark .pane-tab-btn:hover {
 
 .search-input-wrapper {
   position: relative;
+  display: flex;
+  align-items: center;
   flex: 1;
-  min-width: 200px;
+  min-width: 140px;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 0 6px 0 10px;
+  height: 32px;
+  gap: 6px;
+  transition: all 0.15s ease;
 }
-.search-input-wrapper svg {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--muted-foreground);
+
+.search-input-wrapper:focus-within {
+  border-color: var(--ring);
+  background: var(--card);
 }
+
 .search-input-wrapper input {
-  padding-left: 36px;
-  width: 100%;
+  flex: 1;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-size: 11.5px;
+  height: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  outline: none !important;
+  color: var(--foreground) !important;
+}
+
+.search-clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted-foreground);
+  padding: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.search-clear-btn:hover {
+  background: rgba(var(--foreground-rgb), 0.08);
+  color: var(--foreground);
+}
+
+.search-submit-btn {
+  background: var(--accent);
+  border: none;
+  color: var(--ring);
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.search-submit-btn:hover {
+  background: var(--ring);
+  color: var(--card);
 }
 
 .dropzone-container {

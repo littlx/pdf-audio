@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Calendar, FileText, Search, Trash2, UploadCloud, Wand2, Eye, Loader2 } from 'lucide-react';
+import { Calendar, FileText, Search, Trash2, UploadCloud, Wand2, Eye, Loader2, X, ArrowRight } from 'lucide-react';
 import { api } from '../api/client';
 import type { PdfFile } from '../api/types';
 import { Button } from './ui/button';
@@ -81,22 +81,38 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
       {/* Filters Toolbar */}
       <div className="library-filters">
         <div className="search-input-wrapper">
-          <Search size={14} />
+          <Search size={14} className="text-muted-foreground" />
           <input
             placeholder={t('searchInLibrary')}
             value={keywordInput}
             onChange={(e) => setKeywordInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
           />
+          {keywordInput && (
+            <button
+              onClick={() => {
+                setKeywordInput('');
+                setSearchQuery('');
+              }}
+              className="search-clear-btn"
+              title={t('clear') || '清空'}
+            >
+              <X size={12} />
+            </button>
+          )}
+          <button
+            onClick={handleSearchSubmit}
+            className="search-submit-btn"
+            title={t('search') || '搜索'}
+          >
+            <ArrowRight size={13} />
+          </button>
         </div>
         <select value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="uploaded_at">{t('uploadDate')}</option>
           <option value="file_size">{t('fileSize')}</option>
           <option value="original_name">{t('name')}</option>
         </select>
-        <Button size="sm" variant="secondary" onClick={handleSearchSubmit}>
-          {t('search')}
-        </Button>
       </div>
 
       {/* Combined Drag & Drop + Click Upload Area */}
