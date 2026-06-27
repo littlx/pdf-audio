@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { FileText, Pause, Play, RotateCcw, XCircle, RefreshCw, AlertCircle, Trash2, CheckCircle2, Circle } from 'lucide-react';
+import { FileText, Pause, Play, RotateCcw, XCircle, RefreshCw, AlertCircle, Trash2, CheckCircle2, Circle, Eye, Volume2 } from 'lucide-react';
 import { api } from '../api/client';
 import type { AudioFile, Task } from '../api/types';
 import { Button } from './ui/button';
@@ -53,7 +53,62 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
   const [audios, setAudios] = useState<AudioFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [detailTask, setDetailTask] = useState<any | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [playingClip, setPlayingClip] = useState<string | null>(null);
+  const clipAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Load task details dynamically
+  const loadTaskDetail = async (taskId: string) => {
+    setIsLoadingDetail(true);
+    try {
+      const data = await api<any>(`/api/tasks/${taskId}`);
+      setDetailTask(data);
+      setIsDetailOpen(true);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : '加载任务详情失败', 'error');
+    } finally {
+      setIsLoadingDetail(false);
+    }
+  };
+
+  // Play inline audio clip
+  const playClip = (taskId: string, clipKey: string) => {
+    if (clipAudioRef.current) {
+      clipAudioRef.current.pause();
+    }
+    
+    if (playingClip === clipKey) {
+      setPlayingClip(null);
+      return;
+    }
+    
+    // The browser will send the auth cookie automatically
+    const audioUrl = `/api/tasks/${taskId}/clips/${clipKey}`;
+    const audio = new Audio(audioUrl);
+    clipAudioRef.current = audio;
+    setPlayingClip(clipKey);
+    
+    audio.play().catch((err) => {
+      console.error('Failed to play clip:', err);
+      toast(lang === 'zh' ? '音频文件加载失败或正在生成' : 'Failed to load clip audio', 'error');
+      setPlayingClip(null);
+    });
+    
+    audio.onended = () => {
+      setPlayingClip(null);
+    };
+  };
+
+  // Stop audio on unmount or close
+  useEffect(() => {
+    return () => {
+      if (clipAudioRef.current) {
+        clipAudioRef.current.pause();
+      }
+    };
+  }, []);
   // Keep a ref of tasks to check if we should keep polling
   const tasksRef = useRef<Task[]>([]);
   tasksRef.current = tasks;
@@ -306,6 +361,18 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
                           <Trash2 size={12.5} />
                         </Button>
 
+                        {/* View Details Action */}
+                        <Button
+                          variant="ghost"
+                          size="iconSm"
+                          onClick={() => loadTaskDetail(task.id)}
+                          data-tooltip={lang === 'zh' ? '查看中间过程与生成片段' : 'View intermediate clips'}
+                          className="hover:bg-muted text-muted-foreground"
+                          disabled={isLoadingDetail}
+                        >
+                          <Eye size={12.5} />
+                        </Button>
+
                         {/* Active Controls */}
                         {['pending', 'running'].includes(task.status) && (
                           <>
@@ -384,6 +451,173 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
           )}
         </div>
       </div>
+
+    {/* Task Details Modal */}
+    {isDetailOpen && detailTask && (
+      <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="w-full max-w-3xl bg-card rounded-lg border border-border shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+          {/* Modal Header */}
+          <div className="p-4 border-b border-border flex justify-between items-center bg-muted/40 shrink-0">
+            <div className="flex flex-col gap-0.5">
+              <h3 className="text-sm font-semibold text-foreground m-0">
+                {lang === 'zh' ? '任务执行过程详情' : 'Task Execution Details'}
+              </h3>
+              <span className="text-[10px] text-muted-foreground">
+                ID: {detailTask.id} • {detailTask.source_pdf_name || (lang === 'zh' ? '自由输入文本' : 'Raw text input')}
+              </span>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setIsDetailOpen(false);
+                if (clipAudioRef.current) clipAudioRef.current.pause();
+                setPlayingClip(null);
+              }}
+              className="w-7 h-7 p-0 shrink-0"
+            >
+              <XCircle size={16} />
+            </Button>
+          </div>
+
+          {/* Modal Body */}
+          <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-4 min-h-0">
+            {/* Task Progress Status Header */}
+            <div className="p-3 rounded bg-muted/30 border border-border flex flex-col gap-2 shrink-0">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-semibold text-foreground flex items-center gap-1.5">
+                  {lang === 'zh' ? '当前进度' : 'Progress'}: {getStageLabel(detailTask.stage, lang)} ({detailTask.progress}%)
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-semibold border ${
+                  detailTask.status === 'completed' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
+                  detailTask.status === 'failed' ? 'bg-destructive/10 text-destructive border-destructive/20' :
+                  detailTask.status === 'running' ? 'bg-primary/10 text-primary border-primary/20 animate-pulse' :
+                  'bg-muted text-muted-foreground border-border'
+                }`}>
+                  {detailTask.status}
+                </span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-300 rounded-full ${
+                    detailTask.status === 'failed' ? 'bg-destructive' :
+                    detailTask.status === 'completed' ? 'bg-green-500' : 'bg-primary'
+                  }`} 
+                  style={{ width: `${detailTask.progress}%` }} 
+                />
+              </div>
+              {detailTask.error_message && (
+                <div className="mt-1 text-[10px] p-2 rounded bg-destructive/10 border border-destructive/20 text-destructive font-mono whitespace-pre-wrap max-h-24 overflow-y-auto">
+                  {detailTask.error_message}
+                </div>
+              )}
+            </div>
+
+            {/* Tabs Content */}
+            <div className="flex-1 flex flex-col gap-4 min-h-0">
+              {/* 1. Raw Text Box */}
+              <div className="flex flex-col gap-1 shrink-0">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  {lang === 'zh' ? '1. 提取的原始文本' : '1. Raw Extracted Text'}
+                </span>
+                {detailTask.extracted_text ? (
+                  <div className="max-h-36 overflow-y-auto text-xs font-sans p-3 bg-muted/20 rounded border border-border/80 whitespace-pre-wrap text-muted-foreground leading-relaxed">
+                    {detailTask.extracted_text}
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic p-2 bg-muted/10 rounded border border-border border-dashed">
+                    {lang === 'zh' ? '暂无提取的原始文本（可能正处于提取队列中）' : 'No raw text extracted yet.'}
+                  </span>
+                )}
+              </div>
+
+              {/* 2. Bilingual Segments & Audio Clips */}
+              <div className="flex-1 flex flex-col gap-1.5 min-h-0">
+                <div className="flex justify-between items-center shrink-0">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                    {lang === 'zh' ? '2. 双语对照句段与生成音频片段' : '2. Bilingual Segments & Audio Clips'}
+                  </span>
+                  <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono">
+                    {lang === 'zh' ? `已生成 ${detailTask.completed_clips.length} 个片段` : `${detailTask.completed_clips.length} clips ready`}
+                  </span>
+                </div>
+
+                {detailTask.segments && detailTask.segments.length > 0 ? (
+                  <div className="flex-1 overflow-y-auto border border-border rounded divide-y divide-border/60 bg-card">
+                    {detailTask.segments.map((seg: any) => {
+                      const engKey = `${String(seg.index).padStart(4, '0')}_english`;
+                      const chiKey = `${String(seg.index).padStart(4, '0')}_chinese`;
+                      const hasEngClip = detailTask.completed_clips.includes(engKey);
+                      const hasChiClip = detailTask.completed_clips.includes(chiKey);
+                      
+                      return (
+                        <div key={seg.index} className="p-3 hover:bg-muted/10 flex flex-col gap-2 transition-colors">
+                          {/* Segment index indicator */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[9px] font-bold text-muted-foreground/60 font-mono bg-muted px-1 rounded">
+                              #{seg.index}
+                            </span>
+                          </div>
+
+                          {/* English block */}
+                          <div className="flex justify-between items-start gap-4 group">
+                            <p className="text-[11px] leading-relaxed text-foreground m-0 flex-1 font-sans">
+                              {seg.english}
+                            </p>
+                            {hasEngClip && (
+                              <button
+                                type="button"
+                                onClick={() => playClip(detailTask.id, engKey)}
+                                className={`p-1 rounded cursor-pointer transition-all border shrink-0 ${
+                                  playingClip === engKey
+                                    ? 'bg-primary/20 text-primary border-primary/30 animate-pulse'
+                                    : 'bg-muted/50 hover:bg-primary/10 border-border hover:border-primary/20 text-muted-foreground hover:text-primary'
+                                }`}
+                                title={lang === 'zh' ? '播放英文片段' : 'Play English clip'}
+                              >
+                                <Volume2 size={11} className={playingClip === engKey ? 'scale-110' : ''} />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Chinese block */}
+                          <div className="flex justify-between items-start gap-4 group mt-1">
+                            <p className="text-[11px] leading-relaxed text-foreground m-0 flex-1 font-sans">
+                              {seg.chinese}
+                            </p>
+                            {hasChiClip && (
+                              <button
+                                type="button"
+                                onClick={() => playClip(detailTask.id, chiKey)}
+                                className={`p-1 rounded cursor-pointer transition-all border shrink-0 ${
+                                  playingClip === chiKey
+                                    ? 'bg-primary/20 text-primary border-primary/30 animate-pulse'
+                                    : 'bg-muted/50 hover:bg-primary/10 border-border hover:border-primary/20 text-muted-foreground hover:text-primary'
+                                }`}
+                                title={lang === 'zh' ? '播放中文片段' : 'Play Chinese clip'}
+                              >
+                                <Volume2 size={11} className={playingClip === chiKey ? 'scale-110' : ''} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center border border-border border-dashed rounded p-6 text-center text-muted-foreground bg-muted/5">
+                    <Circle size={20} className="text-muted-foreground animate-spin opacity-40 mb-2" />
+                    <span className="text-xs">
+                      {lang === 'zh' ? '尚未生成对照句段（AI 翻译对齐进行中...）' : 'Translating and aligning segments...'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
