@@ -288,8 +288,19 @@ async def task_events(task_id: str):
 @router.delete("/{task_id}", response_model=OkOut)
 def delete_task(task_id: str, db: Session = Depends(get_db)):
     task = get_task_or_404(db, task_id)
-    if task.status not in TERMINAL_STATUSES:
-        conflict("Cancel the task and wait for it to stop before deleting it")
+    # If the task is active (pending, running, canceling), attempt to cancel its RQ job in Redis first
+    if task.status in ACTIVE_STATUSES:
+        try:
+            from rq.job import Job
+            redis_conn = Redis.from_url(settings.redis_url)
+            if task.rq_job_id:
+                try:
+                    job = Job.fetch(task.rq_job_id, connection=redis_conn)
+                    job.cancel()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     # Delete associated AudioFile if exists
     audio = db.query(AudioFile).filter(AudioFile.task_id == task_id).first()

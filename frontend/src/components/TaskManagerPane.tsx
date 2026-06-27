@@ -117,12 +117,14 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
     const isRunning = ['pending', 'running', 'canceling'].includes(task.status);
     const confirmMsg = isRunning
       ? (lang === 'zh'
-        ? '该任务仍处于活跃或取消中状态。请先取消并等待任务停止后再删除。'
-        : 'This task is still active or canceling. Cancel it first and wait for it to stop before deleting.')
-      : t('deleteConfirmTask');
+        ? '该任务目前处于活跃或未完成状态，删除它将会强力终止并清理所有临时文件。是否确定强制删除？'
+        : 'This task is still active or incomplete. Deleting it will force-terminate and clean up all temporary files. Are you sure you want to force delete?')
+      : (lang === 'zh'
+        ? '确定要删除该任务吗？'
+        : 'Are you sure you want to delete this task?');
 
     const ok = await confirm(confirmMsg);
-    if (!ok || isRunning) return;
+    if (!ok) return;
     try {
       await api(`/api/tasks/${task.id}`, { method: 'DELETE' });
       toast(t('deleteSuccess') || '删除成功', 'success');
