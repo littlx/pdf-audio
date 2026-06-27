@@ -553,31 +553,33 @@ html.dark .pane-tab-btn:hover {
 }
 
 /* Active conversion task widget */
+/* Active conversion task widget */
 .task-status-widget {
   background: var(--muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   position: relative;
   overflow: hidden;
+  transition: all 0.3s ease;
 }
-.task-status-widget::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 4px;
-  height: 100%;
-  background: var(--ring);
+
+.task-status-widget.status-running {
+  border-color: rgba(16, 185, 129, 0.25);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.03);
 }
-.task-status-widget.is-failed::before {
-  background: var(--destructive);
+
+.task-status-widget.status-failed {
+  border-color: rgba(239, 68, 68, 0.25);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.03);
 }
-.task-status-widget.is-paused::before {
-  background: #f59e0b;
+
+.task-status-widget.status-paused {
+  border-color: rgba(245, 158, 11, 0.25);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.03);
 }
 
 .task-progress-header {
@@ -1194,6 +1196,125 @@ audio {
   .subtitle-drawer-panel {
     height: calc(100vh - 185px - env(safe-area-inset-bottom));
   }
+}
+
+/* Task Stepper Timeline */
+.task-timeline {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-left: 8px;
+  position: relative;
+}
+
+.task-timeline::before {
+  content: "";
+  position: absolute;
+  left: 19px; /* Centered with the 24px circles (24px/2 - 1px border = 11px + 8px padding = 19px) */
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  background: var(--border);
+  z-index: 0;
+}
+
+.task-timeline-item {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  position: relative;
+  z-index: 10;
+}
+
+.task-timeline-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  background: var(--secondary);
+  border: 1px solid var(--border);
+  color: var(--muted-foreground);
+  transition: all 0.25s ease;
+}
+
+.task-timeline-item.is-completed .task-timeline-dot {
+  background: var(--accent);
+  border-color: var(--ring);
+  color: var(--ring);
+}
+
+.task-timeline-item.is-active .task-timeline-dot {
+  background: var(--ring);
+  border-color: var(--ring);
+  color: var(--card);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+  animation: pulseDot 2.0s infinite ease-in-out;
+}
+
+.task-timeline-item.is-failed .task-timeline-dot {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: var(--destructive);
+  color: var(--destructive);
+}
+
+.task-timeline-item.is-paused .task-timeline-dot {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.task-timeline-item.is-canceled .task-timeline-dot {
+  background: var(--secondary);
+  border-color: var(--border);
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+}
+
+.task-timeline-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-top: 3px;
+}
+
+.task-timeline-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.task-timeline-item.is-active .task-timeline-title {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.task-timeline-item.is-completed .task-timeline-title {
+  color: var(--foreground);
+}
+
+.task-timeline-item.is-failed .task-timeline-title {
+  color: var(--destructive);
+}
+
+.task-timeline-item.is-paused .task-timeline-title {
+  color: #f59e0b;
+}
+
+.task-timeline-desc {
+  font-size: 10px;
+  color: var(--muted-foreground);
+  margin-top: 1px;
+}
+
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.95; }
 }
 
 

@@ -32,6 +32,30 @@ function canRetry(status: string) {
   return ['failed', 'paused', 'canceled'].includes(status);
 }
 
+function getStepIndex(stage: string): number {
+  switch (stage) {
+    case 'pending':
+    case 'extracting_text':
+    case 'text_ready':
+      return 0;
+    case 'generating_bilingual_text':
+    case 'bilingual_text_ready':
+      return 1;
+    case 'generating_tts_clips':
+    case 'clips_ready':
+      return 2;
+    case 'merging_audio':
+    case 'normalizing_audio':
+      return 3;
+    case 'generating_subtitles':
+      return 4;
+    case 'completed':
+      return 5;
+    default:
+      return 0;
+  }
+}
+
 const mergeTask = (prev: Task | null, incoming: Task): Task => {
   if (!prev || prev.id !== incoming.id) return incoming;
   return {
@@ -43,7 +67,7 @@ const mergeTask = (prev: Task | null, incoming: Task): Task => {
 };
 
 export default function ConvertPane({ pdf, initialText = '', onConversionComplete }: ConvertPaneProps) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const { toast } = useToast();
 
   const [pageExpression, setPageExpression] = useState('1');
@@ -58,6 +82,22 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   const [completedAudio, setCompletedAudio] = useState<AudioFile | null>(null);
   const [showSegments, setShowSegments] = useState(false);
   const notifiedTaskId = useRef<string | null>(null);
+
+  const steps = lang === 'zh' ? [
+    { label: '提取 PDF 文本', desc: '从 PDF 或选区中解析原始内容' },
+    { label: 'AI 双语对齐与翻译', desc: '利用大模型生成精准中英对照' },
+    { label: '分句语音合成', desc: '生成高品质双语朗读音频切片' },
+    { label: '音频合成与正规化', desc: '拼接音频并优化电平与降噪' },
+    { label: '生成同步双语字幕', desc: '生成与音频同步的播放器字幕' }
+  ] : [
+    { label: 'Extract PDF Text', desc: 'Parsing original content from PDF' },
+    { label: 'AI Bilingual Translation', desc: 'Generating translation and alignment' },
+    { label: 'Sentence Voice Synthesis', desc: 'Generating read-aloud audio clips' },
+    { label: 'Audio Merging & Normalizing', desc: 'Merging audio and optimizing volume' },
+    { label: 'Generate Synced Subtitles', desc: 'Rendering synced player subtitles' }
+  ];
+
+  const stepIndex = task ? getStepIndex(task.stage || 'pending') : 0;
 
   // Sync initialText if it changes from parent
   useEffect(() => {
@@ -360,7 +400,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
 
       {/* Task Status Widget */}
       {task && (
-        <div className={`task-status-widget ${task.status === 'failed' ? 'is-failed' : task.status === 'paused' ? 'is-paused' : ''}`}>
+        <div className={`task-status-widget status-${task.status}`}>
           <div className="task-progress-header">
             <div className="flex flex-col gap-1">
               <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
@@ -368,7 +408,6 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
               </span>
               <span className="text-xs font-bold flex items-center gap-1.5">
                 <span className={`status-badge is-${task.status}`}>{task.status}</span>
-                <span className="text-muted-foreground">{task.stage}</span>
               </span>
             </div>
             <span className="text-sm font-extrabold text-ring">{task.progress}%</span>
@@ -378,14 +417,44 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             <div className="progress-bar-fill" style={{ width: `${task.progress}%` }} />
           </div>
 
+          {/* Task Stepper Timeline */}
+          <div className="task-timeline">
+            {steps.map((step, idx) => {
+              const isCompleted = stepIndex > idx;
+              const isActive = stepIndex === idx && task.status === 'running';
+              const isFailed = stepIndex === idx && task.status === 'failed';
+              const isPaused = stepIndex === idx && task.status === 'paused';
+              const isCanceled = stepIndex === idx && task.status === 'canceled';
+
+              let itemClass = '';
+              if (isCompleted) itemClass = 'is-completed';
+              else if (isActive) itemClass = 'is-active';
+              else if (isFailed) itemClass = 'is-failed';
+              else if (isPaused) itemClass = 'is-paused';
+              else if (isCanceled) itemClass = 'is-canceled';
+
+              return (
+                <div key={idx} className={`task-timeline-item ${itemClass}`}>
+                  <div className="task-timeline-dot">
+                    {isCompleted ? '✓' : idx + 1}
+                  </div>
+                  <div className="task-timeline-content">
+                    <span className="task-timeline-title">{step.label}</span>
+                    <span className="task-timeline-desc">{step.desc}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
           {task.error_message && (
-            <p className="text-xs text-destructive bg-destructive/10 p-2 rounded border border-destructive/20 font-medium">
+            <p className="text-xs text-destructive bg-destructive/10 p-2 rounded border border-destructive/20 font-medium mt-2">
               {task.error_message}
             </p>
           )}
 
           {/* Task Control Actions */}
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">
             {canPause(task.status) && (
               <Button variant="secondary" size="sm" onClick={() => control('pause')} className="flex items-center gap-1 flex-1 text-[11px]">
                 <Pause size={12} />
