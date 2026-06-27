@@ -173,10 +173,10 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
                         <span>{pdf.page_count} {t('pages')}</span>
                         <span>·</span>
                         <span>{(pdf.file_size / 1024 / 1024).toFixed(1)} MB</span>
-                        <span>·</span>
-                        <span>{pdf.author || 'Unknown Author'}</span>
-                        <span>·</span>
-                        <span className="inline-flex items-center gap-1">
+                        <span className="hide-on-mobile">·</span>
+                        <span className="hide-on-mobile">{pdf.author || 'Unknown Author'}</span>
+                        <span className="hide-on-mobile">·</span>
+                        <span className="inline-flex items-center gap-1 hide-on-mobile">
                           <Calendar size={10} />
                           {new Date(pdf.uploaded_at).toLocaleDateString()}
                         </span>
@@ -196,11 +196,11 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
                     <Button
                       variant="secondary"
                       size="sm"
-                      className="flex items-center gap-1 text-[11px]"
+                      className="flex items-center gap-1 text-[11px] pdf-convert-btn-adaptive"
                       onClick={() => onOpenConvert(pdf)}
                     >
                       <Wand2 size={12} />
-                      <span>{t('convertPdf')}</span>
+                      <span className="hide-on-mobile">{t('convertPdf')}</span>
                     </Button>
                     <Button
                       variant="ghost"

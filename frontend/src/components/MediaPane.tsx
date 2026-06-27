@@ -85,11 +85,11 @@ export default function MediaPane() {
                     <div className="pdf-meta-row">
                       {audio.source_pdf_name && (
                         <>
-                          <span className="inline-flex items-center gap-1 pdf-source-name min-w-0 max-w-[150px] sm:max-w-[260px] md:max-w-[360px]">
+                          <span className="inline-flex items-center gap-1 pdf-source-name min-w-0 max-w-[150px] sm:max-w-[260px] md:max-w-[360px] hide-on-mobile">
                             <FileText size={10} className="flex-shrink-0" />
                             <span className="truncate">{audio.source_pdf_name.replace(/\.pdf$/i, '')}</span>
                           </span>
-                          <span>·</span>
+                          <span className="hide-on-mobile">·</span>
                         </>
                       )}
                       {audio.page_expression && (
@@ -104,8 +104,8 @@ export default function MediaPane() {
                         <Clock size={10} />
                         {formatTime(audio.duration)}
                       </span>
-                      <span>·</span>
-                      <span className="inline-flex items-center gap-1">
+                      <span className="hide-on-mobile">·</span>
+                      <span className="inline-flex items-center gap-1 hide-on-mobile">
                         <Calendar size={10} />
                         {new Date(audio.created_at).toLocaleDateString()}
                       </span>
@@ -117,7 +117,7 @@ export default function MediaPane() {
                   <Button
                     variant={isActive ? 'default' : 'secondary'}
                     size="sm"
-                    className="flex items-center gap-1 text-[11px]"
+                    className="flex items-center gap-1 text-[11px] pdf-convert-btn-adaptive"
                     onClick={() => {
                       if (isActive) {
                         togglePlay();
@@ -127,16 +127,11 @@ export default function MediaPane() {
                     }}
                   >
                     {isCurrentPlaying ? (
-                      <>
-                        <Pause size={12} fill="currentColor" />
-                        <span>{t('pause')}</span>
-                      </>
+                      <Pause size={12} fill="currentColor" />
                     ) : (
-                      <>
-                        <Play size={12} fill="currentColor" />
-                        <span>{t('play')}</span>
-                      </>
+                      <Play size={12} fill="currentColor" />
                     )}
+                    <span className="hide-on-mobile">{isCurrentPlaying ? t('pause') : t('play')}</span>
                   </Button>
                   <Button
                     variant="ghost"
