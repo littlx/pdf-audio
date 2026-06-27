@@ -135,28 +135,31 @@ export default function TaskManagerPane() {
         </div>
       )}
 
-      {/* Stats Cards Overview Header */}
+      {/* Stats Bar Overview Header */}
       {!loading && tasks.length > 0 && (
-        <div className="task-stats-grid">
-          <div className="task-stat-card">
-            <span className="task-stat-value">{totalCount}</span>
-            <span className="task-stat-label">{t('statTotal') || '总任务'}</span>
+        <div className="task-metrics-bar">
+          <div className="task-metric-item">
+            <span className="task-metric-dot" />
+            <span className="task-metric-label">{t('statTotal') || '总任务'}:</span>
+            <span className="task-metric-value">{totalCount}</span>
           </div>
-          <div className="task-stat-card">
-            <span className={`task-stat-value ${runningCount > 0 ? 'text-ring animate-pulse' : 'text-muted-foreground'}`}>
-              {runningCount}
-            </span>
-            <span className="task-stat-label">{t('statRunning') || '进行中'}</span>
+          <div className="task-metric-divider" />
+          <div className="task-metric-item">
+            <span className={`task-metric-dot ${runningCount > 0 ? 'is-running' : ''}`} />
+            <span className="task-metric-label">{t('statRunning') || '进行中'}:</span>
+            <span className="task-metric-value">{runningCount}</span>
           </div>
-          <div className="task-stat-card">
-            <span className="task-stat-value text-ring">{completedCount}</span>
-            <span className="task-stat-label">{t('statCompleted') || '已完成'}</span>
+          <div className="task-metric-divider" />
+          <div className="task-metric-item">
+            <span className="task-metric-dot is-completed" />
+            <span className="task-metric-label">{t('statCompleted') || '已完成'}:</span>
+            <span className="task-metric-value">{completedCount}</span>
           </div>
-          <div className="task-stat-card">
-            <span className={`task-stat-value ${failedCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
-              {failedCount}
-            </span>
-            <span className="task-stat-label">{t('statFailed') || '已失败'}</span>
+          <div className="task-metric-divider" />
+          <div className="task-metric-item">
+            <span className="task-metric-dot is-failed" />
+            <span className="task-metric-label">{t('statFailed') || '已失败'}:</span>
+            <span className="task-metric-value">{failedCount}</span>
           </div>
         </div>
       )}
