@@ -172,6 +172,69 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
   };
 
+  const normalTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fullscreenTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const handleMergeSelectedLines = (isFullscreen: boolean) => {
+    const textarea = isFullscreen ? fullscreenTextareaRef.current : normalTextareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    
+    if (start === end) {
+      toast(
+        lang === 'zh' ? '请先在文本框中选中需要合并的多行文本！' : 'Please select multiple lines in the text area first!',
+        'error'
+      );
+      return;
+    }
+    
+    const selectedText = textToConvert.substring(start, end);
+    const lines = selectedText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    
+    if (lines.length <= 1) {
+      toast(
+        lang === 'zh' ? '所选内容不足多行，无需合并。' : 'Selected text is not multi-line.',
+        'error'
+      );
+      return;
+    }
+    
+    let merged = '';
+    for (let i = 0; i < lines.length; i++) {
+      if (i === 0) {
+        merged += lines[i];
+      } else {
+        const prev = lines[i - 1];
+        const curr = lines[i];
+        const lastCharOfPrev = prev.slice(-1);
+        const firstCharOfCurr = curr.charAt(0);
+        // Smart check: If either the last character of previous line or the first character of current line is Chinese, do not add a space.
+        const isChinese = /[\u4e00-\u9fa5]/.test(lastCharOfPrev) || /[\u4e00-\u9fa5]/.test(firstCharOfCurr);
+        if (isChinese) {
+          merged += curr;
+        } else {
+          merged += ' ' + curr;
+        }
+      }
+    }
+    
+    const newText = textToConvert.substring(0, start) + merged + textToConvert.substring(end);
+    setTextToConvert(newText);
+    setEditableText(newText);
+    
+    toast(
+      lang === 'zh' ? `已成功将所选的 ${lines.length} 行合并为 1 行。` : `Successfully merged ${lines.length} lines into 1.`,
+      'success'
+    );
+    
+    // Focus back and select the merged text
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start, start + merged.length);
+    }, 50);
+  };
+
   const steps = lang === 'zh' ? [
     { label: '提取 PDF 文本', desc: '从 PDF 或选区中解析原始内容' },
     { label: 'AI 双语对齐与翻译', desc: '利用大模型生成精准中英对照' },
@@ -481,6 +544,15 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 )}
                 <button
                   type="button"
+                  onClick={() => handleMergeSelectedLines(false)}
+                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0 transition-colors"
+                  title={lang === 'zh' ? '将选中的多行文本合并为一行' : 'Merge selected lines into one line'}
+                >
+                  <FileText size={11} />
+                  <span>{lang === 'zh' ? '合并选中行' : 'Merge Lines'}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setIsFullscreenEditorOpen(true)}
                   className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0"
                 >
@@ -492,6 +564,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             
             <textarea
               id="raw-text-input"
+              ref={normalTextareaRef}
               value={textToConvert}
               onChange={(e) => {
                 setTextToConvert(e.target.value);
@@ -782,6 +855,15 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 )}
                 <button
                   type="button"
+                  onClick={() => handleMergeSelectedLines(true)}
+                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0 transition-colors"
+                  title={lang === 'zh' ? '将选中的多行文本合并为一行' : 'Merge selected lines into one line'}
+                >
+                  <FileText size={12} />
+                  <span>{lang === 'zh' ? '合并选中行' : 'Merge Lines'}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => setIsFullscreenEditorOpen(false)}
                   className="text-xs py-1 px-3 rounded border border-border hover:bg-muted text-foreground transition-colors font-medium cursor-pointer"
                 >
@@ -793,6 +875,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             {/* Modal Body */}
             <div className="flex-1 p-4 bg-background overflow-hidden flex flex-col">
               <textarea
+                ref={fullscreenTextareaRef}
                 value={textToConvert}
                 onChange={(e) => {
                   setTextToConvert(e.target.value);
