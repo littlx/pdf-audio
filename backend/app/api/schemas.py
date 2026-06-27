@@ -1,5 +1,6 @@
 import re
 from typing import Literal
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -24,7 +25,7 @@ class PdfOut(BaseModel):
     author: str | None = None
     last_preview_page: int
     status: str
-    uploaded_at: str
+    uploaded_at: datetime
 
 
 class OutlineItem(BaseModel):
@@ -111,7 +112,7 @@ class AudioOut(BaseModel):
     page_expression: str | None
     audio_mode: str
     duration: float | None
-    created_at: str
+    created_at: datetime
     audio_url: str
     subtitle_json_url: str
     subtitle_vtt_url: str
