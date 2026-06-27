@@ -133,15 +133,32 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   // SSE and Polling fallback for task tracking
   useEffect(() => {
     if (!task) return;
+    
+    // If the task is already in a terminal state, don't start listening or polling
+    if (['completed', 'failed', 'canceled'].includes(task.status)) {
+      return;
+    }
+
     let timer: any = null;
+    let isCleanedUp = false;
     const source = new EventSource(`/api/tasks/${task.id}/events`);
 
     const startPolling = () => {
-      if (timer) return;
+      if (timer || isCleanedUp) return;
       timer = setInterval(async () => {
         try {
           const data = await api<Task>(`/api/tasks/${task.id}`);
-          setTask(prev => mergeTask(prev, data));
+          if (isCleanedUp) return;
+          
+          setTask(prev => {
+            const merged = mergeTask(prev, data);
+            // If the task reached a terminal state, stop polling
+            if (['completed', 'failed', 'canceled'].includes(merged.status)) {
+              clearInterval(timer);
+              timer = null;
+            }
+            return merged;
+          });
         } catch (err) {
           console.error('Task polling failed:', err);
         }
@@ -149,20 +166,30 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     };
 
     source.onmessage = (event) => {
+      if (isCleanedUp) return;
       if (timer) {
         clearInterval(timer);
         timer = null;
       }
       const data = JSON.parse(event.data);
-      setTask(prev => mergeTask(prev, data));
+      setTask(prev => {
+        const merged = mergeTask(prev, data);
+        // If the task reached a terminal state, close the event source
+        if (['completed', 'failed', 'canceled'].includes(merged.status)) {
+          source.close();
+        }
+        return merged;
+      });
     };
 
     source.onerror = () => {
+      if (isCleanedUp) return;
       source.close();
       startPolling();
     };
 
     return () => {
+      isCleanedUp = true;
       source.close();
       if (timer) clearInterval(timer);
     };
@@ -223,7 +250,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
           </div>
         </div>
         {pdf && (
-          <span className="text-[11px] font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded">
+          <span className="text-[11px] font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">
             {pdf.page_count} {t('pagesCount')}
           </span>
         )}

@@ -33,15 +33,19 @@ function DashboardContent({
   } = usePlayer();
 
   const [selectedPdf, setSelectedPdf] = useState<PdfFile | undefined>(undefined);
-  const [leftTab, setLeftTab] = useState<'library' | 'media' | 'reader'>('library');
+  const [leftTab, setLeftTab] = useState<'library' | 'media' | 'reader' | 'convert'>('library');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // If selectedPdf changes, sync left tab to 'reader'
   useEffect(() => {
     if (selectedPdf) {
-      setLeftTab('reader');
+      if (leftTab !== 'convert') {
+        setLeftTab('reader');
+      }
     } else {
-      setLeftTab('library');
+      if (leftTab === 'reader' || leftTab === 'convert') {
+        setLeftTab('library');
+      }
     }
   }, [selectedPdf]);
 
@@ -108,19 +112,14 @@ function DashboardContent({
                 <FileText size={13} />
                 <span>{t('pdfReader')}</span>
               </button>
+              <button
+                className={`pane-tab-btn mobile-only-tab-btn ${leftTab === 'convert' ? 'is-active' : ''}`}
+                onClick={() => setLeftTab('convert')}
+              >
+                <Wand2 size={13} />
+                <span>{t('convertPdf')}</span>
+              </button>
             </div>
-            {selectedPdf && leftTab === 'reader' && (
-              <div className="pane-header-actions">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedPdf(undefined)}
-                  className="text-[11px] h-7 px-2"
-                >
-                  {t('closeFile')}
-                </Button>
-              </div>
-            )}
           </div>
 
           <div className="pane-content">
@@ -128,7 +127,12 @@ function DashboardContent({
               <LibraryPane
                 activePdfId={selectedPdf?.id}
                 onSelectPdf={setSelectedPdf}
-                onOpenConvert={setSelectedPdf}
+                onOpenConvert={(pdf) => {
+                  setSelectedPdf(pdf);
+                  if (window.innerWidth < 1100) {
+                    setLeftTab('convert');
+                  }
+                }}
               />
             </div>
             <div style={{ display: leftTab === 'media' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
@@ -139,11 +143,17 @@ function DashboardContent({
                 <PdfReaderPane pdf={selectedPdf} />
               </div>
             )}
+            <div style={{ display: leftTab === 'convert' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+              <ConvertPane
+                pdf={selectedPdf}
+                onConversionComplete={handleConversionComplete}
+              />
+            </div>
           </div>
         </section>
 
         {/* Right Workspace Panel: Convert Workspace (Dedicated) */}
-        <section className="workspace-pane">
+        <section className="workspace-pane desktop-only-pane">
           <div className="pane-tabs">
             <div className="pane-tab-list">
               <span className="pane-tab-btn is-active">
