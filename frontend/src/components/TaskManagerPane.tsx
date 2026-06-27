@@ -275,7 +275,7 @@ export default function TaskManagerPane() {
                       variant="ghost"
                       size="iconSm"
                       onClick={() => deleteTask(task)}
-                      title={t('deleteTask')}
+                      data-tooltip={t('deleteTask') || '删除任务'}
                       className="hover:text-destructive hover:bg-destructive/10 text-muted-foreground mr-auto"
                     >
                       <Trash2 size={12.5} />
@@ -284,10 +284,10 @@ export default function TaskManagerPane() {
                     {/* Active controls: Pause, Resume, Cancel, Retry */}
                     {['pending', 'running'].includes(task.status) && (
                       <>
-                        <Button variant="secondary" size="iconSm" onClick={() => control(task, 'pause')} title={t('pause')}>
+                        <Button variant="secondary" size="iconSm" onClick={() => control(task, 'pause')} data-tooltip={t('pause') || '暂停'}>
                           <Pause size={12} />
                         </Button>
-                        <Button variant="destructive" size="iconSm" onClick={() => control(task, 'cancel')} title={t('cancel')} className="hover:bg-destructive/90">
+                        <Button variant="destructive" size="iconSm" onClick={() => control(task, 'cancel')} data-tooltip={t('cancel') || '取消'} className="hover:bg-destructive/90">
                           <XCircle size={12} />
                         </Button>
                       </>
@@ -295,17 +295,17 @@ export default function TaskManagerPane() {
 
                     {task.status === 'paused' && (
                       <>
-                        <Button variant="secondary" size="iconSm" onClick={() => control(task, 'resume')} title={t('resume')}>
+                        <Button variant="secondary" size="iconSm" onClick={() => control(task, 'resume')} data-tooltip={t('resume') || '继续'}>
                           <Play size={12} />
                         </Button>
-                        <Button variant="destructive" size="iconSm" onClick={() => control(task, 'cancel')} title={t('cancel')} className="hover:bg-destructive/90">
+                        <Button variant="destructive" size="iconSm" onClick={() => control(task, 'cancel')} data-tooltip={t('cancel') || '取消'} className="hover:bg-destructive/90">
                           <XCircle size={12} />
                         </Button>
                       </>
                     )}
 
                     {['failed', 'canceled'].includes(task.status) && (
-                      <Button variant="secondary" size="iconSm" onClick={() => control(task, 'retry')} title={t('retry')}>
+                      <Button variant="secondary" size="iconSm" onClick={() => control(task, 'retry')} data-tooltip={t('retry') || '重试'}>
                         <RotateCcw size={12} />
                       </Button>
                     )}
@@ -340,7 +340,7 @@ export default function TaskManagerPane() {
 
                     {/* Manual Status Loader Spinner */}
                     {['pending', 'running', 'canceling'].includes(task.status) && (
-                      <Button variant="ghost" size="iconSm" onClick={() => load(false)} title={t('refreshStatus')}>
+                      <Button variant="ghost" size="iconSm" onClick={() => load(false)} data-tooltip={t('refreshStatus') || '刷新状态'}>
                         <RefreshCw size={11} className="text-muted-foreground" />
                       </Button>
                     )}
