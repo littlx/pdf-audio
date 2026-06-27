@@ -161,7 +161,7 @@ export default function TaskManagerPane() {
         </div>
       )}
 
-      {/* Task Dashboard Table Rows List */}
+      {/* Task Dashboard List */}
       <div className="flex-1 overflow-y-auto pr-1">
         <div className="task-dash-list">
           {loading && tasks.length === 0 ? (
@@ -174,9 +174,9 @@ export default function TaskManagerPane() {
                     <div className="h-3 bg-secondary rounded w-1/3" />
                   </div>
                 </div>
-                <div className="task-dash-middle hidden md:flex">
-                  <div className="h-3 bg-secondary rounded w-2/3 mb-1" />
-                  <div className="h-1.5 bg-secondary rounded w-full" />
+                <div className="task-dash-console">
+                  <div className="h-1.5 bg-secondary rounded w-full mb-2" />
+                  <div className="h-4 bg-secondary rounded w-1/3" />
                 </div>
               </div>
             ))
@@ -195,10 +195,7 @@ export default function TaskManagerPane() {
               else if (task.output_style === 'business_english') styleLabel = t('businessEnglish');
 
               return (
-                <div
-                  key={task.id}
-                  className="task-dash-row"
-                >
+                <div key={task.id} className="task-dash-row">
                   {/* Left Column: Icon + Text details */}
                   <div className="task-dash-left">
                     <div className={`task-status-indicator-dot status-${task.status}`}>
@@ -231,119 +228,122 @@ export default function TaskManagerPane() {
                     </div>
                   </div>
 
-                  {/* Middle Column: Progress and Stage */}
-                  <div className="task-dash-middle">
-                    {['running', 'pending', 'paused', 'canceling'].includes(task.status) ? (
-                      <>
-                        <div className="task-dash-progress-meta">
-                          <span className="task-dash-stage">{getStageLabel(task.stage, lang)}</span>
-                          <span className="task-dash-percentage">{task.progress}%</span>
-                        </div>
-                        <div className="progress-bar-container h-1 rounded-full overflow-hidden bg-secondary">
-                          <div 
-                            className={`progress-bar-fill h-full transition-all duration-500 rounded-full ${
-                              task.status === 'paused' ? 'bg-amber-500' : 'bg-ring'
-                            }`} 
-                            style={{ width: `${task.progress}%` }} 
-                          />
-                        </div>
-                      </>
-                    ) : task.status === 'completed' ? (
-                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-semibold py-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-ring" />
-                        <span>{t('completed')}</span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5 text-[10px] text-destructive font-semibold">
-                          <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
-                          <span>{task.status === 'failed' ? t('failed') : t('canceled')}</span>
-                        </div>
-                        {task.error_message && (
-                          <span className="text-[9px] text-destructive/80 truncate max-w-[150px]" title={task.error_message}>
-                            {task.error_message}
-                          </span>
-                        )}
+                  {/* Right Column: Progress & Actions console */}
+                  <div className="task-dash-console">
+                    {/* Progress Bar (Full width of the console area) */}
+                    {['running', 'pending', 'paused', 'canceling'].includes(task.status) && (
+                      <div className="progress-bar-container h-1 rounded-full overflow-hidden bg-secondary w-full">
+                        <div 
+                          className={`progress-bar-fill h-full transition-all duration-500 rounded-full ${
+                            task.status === 'paused' ? 'bg-amber-500' : 'bg-ring'
+                          }`} 
+                          style={{ width: `${task.progress}%` }} 
+                        />
                       </div>
                     )}
-                  </div>
 
-                  {/* Right Column: Row Action controls */}
-                  <div className="task-dash-right">
-                    {/* Delete Icon (Far Left in actions group) */}
-                    <Button
-                      variant="ghost"
-                      size="iconSm"
-                      onClick={() => deleteTask(task)}
-                      data-tooltip={t('deleteTask') || '删除任务'}
-                      className="hover:text-destructive hover:bg-destructive/10 text-muted-foreground mr-auto"
-                    >
-                      <Trash2 size={12.5} />
-                    </Button>
-
-                    {/* Active controls: Pause, Resume, Cancel, Retry */}
-                    {['pending', 'running'].includes(task.status) && (
-                      <>
-                        <Button variant="secondary" size="iconSm" onClick={() => control(task, 'pause')} data-tooltip={t('pause') || '暂停'}>
-                          <Pause size={12} />
-                        </Button>
-                        <Button variant="destructive" size="iconSm" onClick={() => control(task, 'cancel')} data-tooltip={t('cancel') || '取消'} className="hover:bg-destructive/90">
-                          <XCircle size={12} />
-                        </Button>
-                      </>
-                    )}
-
-                    {task.status === 'paused' && (
-                      <>
-                        <Button variant="secondary" size="iconSm" onClick={() => control(task, 'resume')} data-tooltip={t('resume') || '继续'}>
-                          <Play size={12} />
-                        </Button>
-                        <Button variant="destructive" size="iconSm" onClick={() => control(task, 'cancel')} data-tooltip={t('cancel') || '取消'} className="hover:bg-destructive/90">
-                          <XCircle size={12} />
-                        </Button>
-                      </>
-                    )}
-
-                    {['failed', 'canceled'].includes(task.status) && (
-                      <Button variant="secondary" size="iconSm" onClick={() => control(task, 'retry')} data-tooltip={t('retry') || '重试'}>
-                        <RotateCcw size={12} />
-                      </Button>
-                    )}
-
-                    {/* Play Listen Button */}
-                    {task.status === 'completed' && audio && (
-                      <Button
-                        variant={isAudioActive ? 'default' : 'secondary'}
-                        size="sm"
-                        className="flex items-center gap-1 text-[10px] h-7 px-2.5"
-                        onClick={() => {
-                          if (isAudioActive) {
-                            togglePlay();
-                          } else {
-                            setActiveAudio(audio);
-                          }
-                        }}
-                      >
-                        {isAudioPlaying ? (
-                          <>
-                            <Pause size={10} fill="currentColor" />
-                            <span>{t('pause')}</span>
-                          </>
+                    {/* Status & Buttons (Same Row) */}
+                    <div className="task-dash-status-actions-row">
+                      {/* Left side: Status text / Stage label */}
+                      <div className="task-dash-status-label-group">
+                        {['running', 'pending', 'paused', 'canceling'].includes(task.status) ? (
+                          <div className="flex items-center gap-1.5 text-[10px] font-semibold">
+                            <span className="task-dash-stage">{getStageLabel(task.stage, lang)}</span>
+                            <span className="text-ring font-bold">{task.progress}%</span>
+                          </div>
+                        ) : task.status === 'completed' ? (
+                          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-ring" />
+                            <span>{t('completed')}</span>
+                          </div>
                         ) : (
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 text-[10px] text-destructive font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
+                              <span>{task.status === 'failed' ? t('failed') : t('canceled')}</span>
+                            </div>
+                            {task.error_message && (
+                              <span className="text-[9px] text-destructive/80 truncate max-w-[140px]" title={task.error_message}>
+                                {task.error_message}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Right side: Action buttons */}
+                      <div className="task-dash-buttons-group">
+                        {/* Delete Action */}
+                        <Button
+                          variant="ghost"
+                          size="iconSm"
+                          onClick={() => deleteTask(task)}
+                          data-tooltip={t('deleteTask') || '删除任务'}
+                          className="hover:text-destructive hover:bg-destructive/10 text-muted-foreground"
+                        >
+                          <Trash2 size={12.5} />
+                        </Button>
+
+                        {/* Active Controls */}
+                        {['pending', 'running'].includes(task.status) && (
                           <>
-                            <Play size={10} fill="currentColor" />
-                            <span>{t('play')}</span>
+                            <Button variant="secondary" size="iconSm" onClick={() => control(task, 'pause')} data-tooltip={t('pause') || '暂停'}>
+                              <Pause size={12} />
+                            </Button>
+                            <Button variant="destructive" size="iconSm" onClick={() => control(task, 'cancel')} data-tooltip={t('cancel') || '取消'} className="hover:bg-destructive/90">
+                              <XCircle size={12} />
+                            </Button>
                           </>
                         )}
-                      </Button>
-                    )}
 
-                    {/* Manual Status Loader Spinner */}
-                    {['pending', 'running', 'canceling'].includes(task.status) && (
-                      <Button variant="ghost" size="iconSm" onClick={() => load(false)} data-tooltip={t('refreshStatus') || '刷新状态'}>
-                        <RefreshCw size={11} className="text-muted-foreground" />
-                      </Button>
-                    )}
+                        {task.status === 'paused' && (
+                          <>
+                            <Button variant="secondary" size="iconSm" onClick={() => control(task, 'resume')} data-tooltip={t('resume') || '继续'}>
+                              <Play size={12} />
+                            </Button>
+                            <Button variant="destructive" size="iconSm" onClick={() => control(task, 'cancel')} data-tooltip={t('cancel') || '取消'} className="hover:bg-destructive/90">
+                              <XCircle size={12} />
+                            </Button>
+                          </>
+                        )}
+
+                        {['failed', 'canceled'].includes(task.status) && (
+                          <Button variant="secondary" size="iconSm" onClick={() => control(task, 'retry')} data-tooltip={t('retry') || '重试'}>
+                            <RotateCcw size={12} />
+                          </Button>
+                        )}
+
+                        {/* Play Action */}
+                        {task.status === 'completed' && audio && (
+                          <Button
+                            variant={isAudioActive ? 'default' : 'secondary'}
+                            size="sm"
+                            className="flex items-center gap-1 text-[10px] h-7 px-2"
+                            onClick={() => {
+                              if (isAudioActive) {
+                                togglePlay();
+                              } else {
+                                setActiveAudio(audio);
+                              }
+                            }}
+                          >
+                            {isAudioPlaying ? (
+                              <Pause size={10} fill="currentColor" />
+                            ) : (
+                              <Play size={10} fill="currentColor" />
+                            )}
+                            <span className="hidden sm:inline">{isAudioPlaying ? t('pause') : t('play')}</span>
+                          </Button>
+                        )}
+
+                        {/* Manual Status Refresh */}
+                        {['pending', 'running', 'canceling'].includes(task.status) && (
+                          <Button variant="ghost" size="iconSm" onClick={() => load(false)} data-tooltip={t('refreshStatus') || '刷新状态'}>
+                            <RefreshCw size={11} className="text-muted-foreground" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               );

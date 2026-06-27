@@ -1476,32 +1476,36 @@ audio {
   color: var(--ring);
 }
 
-.task-dash-middle {
+.task-dash-console {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  flex: 0.9;
-  min-width: 130px;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
 }
 
-.task-dash-progress-meta {
+.task-dash-status-actions-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  font-size: 9.5px;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.task-dash-status-label-group {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
 }
 
 .task-dash-stage {
   font-weight: 600;
   color: var(--muted-foreground);
+  margin-right: 4px;
 }
 
-.task-dash-percentage {
-  font-weight: 700;
-  color: var(--ring);
-}
-
-.task-dash-right {
+.task-dash-buttons-group {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1555,19 +1559,12 @@ audio {
     padding: 2px 6px;
   }
 
-  .task-dash-middle {
+  .task-dash-console {
     width: 100%;
     min-width: 100%;
     margin-top: 4px;
-    padding: 8px 0;
+    padding-top: 8px;
     border-top: 1px dashed var(--border);
-    border-bottom: 1px dashed var(--border);
-  }
-
-  .task-dash-right {
-    justify-content: flex-end;
-    width: 100%;
-    margin-top: 4px;
   }
 }
 
