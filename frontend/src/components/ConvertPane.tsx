@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp, Search, Loader2 } from 'lucide-react';
 import { api } from '../api/client';
 import type { AppSettings, AudioFile, PdfFile, Task } from '../api/types';
 import { Button } from './ui/button';
@@ -84,6 +84,36 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   const [showSegments, setShowSegments] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
   const notifiedTaskId = useRef<string | null>(null);
+
+  const [isExtracting, setIsExtracting] = useState(false);
+
+  const handlePreExtractText = async () => {
+    if (!pdf) return;
+    setIsExtracting(true);
+    try {
+      const res = await api<{ text: string }>(`/api/pdfs/${pdf.id}/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page_expression: pageExpression }),
+      });
+      setTextToConvert(res.text);
+      setEditableText(res.text);
+      setMode('text');
+      toast(
+        lang === 'zh' 
+          ? '文本提取成功，已为您切换到“文本”编辑模式。' 
+          : 'Text extracted successfully. Switched to Text edit mode.', 
+        'success'
+      );
+    } catch (err: any) {
+      toast(
+        err?.message || (lang === 'zh' ? '无法解析该页码范围的文本' : 'Could not parse text for the specified page range.'),
+        'error'
+      );
+    } finally {
+      setIsExtracting(false);
+    }
+  };
 
   const steps = lang === 'zh' ? [
     { label: '提取 PDF 文本', desc: '从 PDF 或选区中解析原始内容' },
@@ -343,6 +373,26 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
               onChange={(e) => setPageExpression(e.target.value)}
               placeholder={t('pageExpressionPlaceholder')}
             />
+            {pdf && (
+              <button
+                type="button"
+                disabled={isExtracting || !pageExpression.trim()}
+                onClick={handlePreExtractText}
+                className="mt-2 text-xs py-1.5 px-3 rounded border border-border bg-[#1f2937]/5 hover:bg-[#1f2937]/10 transition-colors flex items-center justify-center gap-1.5 w-full font-medium"
+              >
+                {isExtracting ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin text-muted-foreground/60" />
+                    <span>{lang === 'zh' ? '正在提取文本...' : 'Extracting text...'}</span>
+                  </>
+                ) : (
+                  <>
+                    <Search size={13} />
+                    <span>{lang === 'zh' ? '预解析文本并编辑' : 'Pre-extract & Edit Text'}</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         ) : (
           <div className="form-group">

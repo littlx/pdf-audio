@@ -38,6 +38,14 @@ class LastPageUpdate(BaseModel):
     page: int = Field(ge=1)
 
 
+class PdfExtractRequest(BaseModel):
+    page_expression: str = Field(min_length=1, max_length=128)
+
+
+class PdfExtractOut(BaseModel):
+    text: str
+
+
 class TaskCreate(BaseModel):
     pdf_id: str | None = None
     input_type: Literal["page_range", "selected_text"]

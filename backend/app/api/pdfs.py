@@ -97,3 +97,14 @@ def rename_pdf(pdf_id: str, payload: PdfRename, db: Session = Depends(get_db)):
     pdf.original_name = name
     db.commit()
     return pdf
+
+
+from app.api.schemas import PdfExtractRequest, PdfExtractOut
+from app.services.text_extraction import extract_text_from_pdf
+
+@router.post("/{pdf_id}/extract", response_model=PdfExtractOut)
+def extract_pdf_pages_text(pdf_id: str, payload: PdfExtractRequest, db: Session = Depends(get_db)):
+    pdf = get_pdf_or_404(db, pdf_id)
+    # Extract text from the PDF file using our text extraction service
+    text, _ = extract_text_from_pdf(pdf.file_path, payload.page_expression, pdf.page_count)
+    return {"text": text}
