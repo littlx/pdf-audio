@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BookOpen, Lock, Settings, FileText, Headphones, Wand2, List } from 'lucide-react';
+import { BookOpen, Lock, Settings, FileText, Headphones, Volume2, List } from 'lucide-react';
 import AccessGate from './components/AccessGate';
 import LibraryPane from './components/LibraryPane';
 import PdfReaderPane from './components/PdfReaderPane';
@@ -102,23 +102,21 @@ function DashboardContent({
                 <Headphones size={13} />
                 <span>{t('mediaLibrary')}</span>
               </button>
-              <button
-                className={`pane-tab-btn ${leftTab === 'reader' ? 'is-active' : ''}`}
-                onClick={() => {
-                  if (selectedPdf) setLeftTab('reader');
-                }}
-                disabled={!selectedPdf}
-                title={!selectedPdf ? t('uploadFirstError') : t('pdfReader')}
-              >
-                <FileText size={13} />
-                <span>{t('pdfReader')}</span>
-              </button>
+              {selectedPdf && (
+                <button
+                  className={`pane-tab-btn ${leftTab === 'reader' ? 'is-active' : ''}`}
+                  onClick={() => setLeftTab('reader')}
+                >
+                  <FileText size={13} />
+                  <span>{t('pdfReader')}</span>
+                </button>
+              )}
               <button
                 className={`pane-tab-btn mobile-only-tab-btn ${leftTab === 'convert' ? 'is-active' : ''}`}
                 onClick={() => setLeftTab('convert')}
               >
-                <Wand2 size={13} />
-                <span>{t('convertPdf')}</span>
+                <Volume2 size={13} />
+                <span>{t('tts') || 'TTS'}</span>
               </button>
               <button
                 className={`pane-tab-btn ${leftTab === 'tasks' ? 'is-active' : ''}`}
@@ -168,8 +166,8 @@ function DashboardContent({
           <div className="pane-tabs">
             <div className="pane-tab-list">
               <span className="pane-tab-btn is-active">
-                <Wand2 size={13} className="text-ring" />
-                <span>{t('convertPdf')}</span>
+                <Volume2 size={13} className="text-ring" />
+                <span>{t('tts') || 'TTS'}</span>
               </span>
             </div>
           </div>
