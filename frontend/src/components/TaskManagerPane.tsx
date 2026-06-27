@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { FileText, Wand2, Pause, Play, RotateCcw, XCircle, RefreshCw, AlertCircle, Trash2 } from 'lucide-react';
+import { FileText, Pause, Play, RotateCcw, XCircle, RefreshCw, AlertCircle, Trash2, CheckCircle2, Circle } from 'lucide-react';
 import { api } from '../api/client';
 import type { AudioFile, Task } from '../api/types';
 import { Button } from './ui/button';
@@ -98,9 +98,7 @@ export default function TaskManagerPane() {
 
   async function deleteTask(taskId: string) {
     const ok = await confirm(t('deleteConfirmTask'));
-    if (!ok) {
-      return;
-    }
+    if (!ok) return;
     try {
       await api(`/api/tasks/${taskId}`, { method: 'DELETE' });
       toast(t('deleteSuccess') || '删除成功', 'success');
@@ -115,29 +113,63 @@ export default function TaskManagerPane() {
     return audios.find((a) => a.task_id === taskId) || null;
   }
 
+  // Quick stats computed values
+  const totalCount = tasks.length;
+  const runningCount = tasks.filter(t => ['running', 'pending'].includes(t.status)).length;
+  const completedCount = tasks.filter(t => t.status === 'completed').length;
+  const failedCount = tasks.filter(t => t.status === 'failed').length;
+
   return (
     <div className="flex flex-col gap-4 h-full">
       {error && (
-        <div className="p-3 bg-destructive/15 text-destructive text-xs font-bold rounded-lg flex items-center gap-2">
+        <div className="p-3 bg-destructive/15 text-destructive text-xs font-bold rounded-lg flex items-center gap-2 animate-scaleUp">
           <AlertCircle size={14} />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Task List Grid */}
+      {/* Stats Cards Overview Header */}
+      {!loading && tasks.length > 0 && (
+        <div className="task-stats-grid">
+          <div className="task-stat-card">
+            <span className="task-stat-value">{totalCount}</span>
+            <span className="task-stat-label">{t('statTotal') || '总任务'}</span>
+          </div>
+          <div className="task-stat-card">
+            <span className={`task-stat-value ${runningCount > 0 ? 'text-ring animate-pulse' : 'text-muted-foreground'}`}>
+              {runningCount}
+            </span>
+            <span className="task-stat-label">{t('statRunning') || '进行中'}</span>
+          </div>
+          <div className="task-stat-card">
+            <span className="task-stat-value text-ring">{completedCount}</span>
+            <span className="task-stat-label">{t('statCompleted') || '已完成'}</span>
+          </div>
+          <div className="task-stat-card">
+            <span className={`task-stat-value ${failedCount > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
+              {failedCount}
+            </span>
+            <span className="task-stat-label">{t('statFailed') || '已失败'}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Task Dashboard Table Rows List */}
       <div className="flex-1 overflow-y-auto pr-1">
-        <div className="task-card-list">
+        <div className="task-dash-list">
           {loading && tasks.length === 0 ? (
             Array.from({ length: 4 }).map((_, idx) => (
-              <div key={idx} className="task-card animate-pulse">
-                <div className="task-card-header">
-                  <div className="task-card-meta flex-1">
-                    <div className="task-card-icon-wrapper bg-secondary" />
-                    <div className="flex-1 flex flex-col gap-2 pl-1">
-                      <div className="h-4 bg-secondary rounded w-2/3" />
-                      <div className="h-3 bg-secondary rounded w-1/2" />
-                    </div>
+              <div key={idx} className="task-dash-row animate-pulse">
+                <div className="task-dash-left">
+                  <div className="task-status-indicator-dot bg-secondary" />
+                  <div className="flex flex-col gap-2 flex-1 pl-1">
+                    <div className="h-4 bg-secondary rounded w-2/3" />
+                    <div className="h-3 bg-secondary rounded w-1/3" />
                   </div>
+                </div>
+                <div className="task-dash-middle hidden md:flex">
+                  <div className="h-3 bg-secondary rounded w-2/3 mb-1" />
+                  <div className="h-1.5 bg-secondary rounded w-full" />
                 </div>
               </div>
             ))
@@ -147,118 +179,138 @@ export default function TaskManagerPane() {
               const isAudioActive = audio && activeAudio?.id === audio.id;
               const isAudioPlaying = isAudioActive && isPlaying;
 
+              // Format styling mode representation
+              let styleLabel = '';
+              if (task.output_style === 'faithful') styleLabel = t('faithful');
+              else if (task.output_style === 'plain_explanation') styleLabel = t('plainExplanation');
+              else if (task.output_style === 'child_friendly') styleLabel = t('childFriendly');
+              else if (task.output_style === 'exam_english') styleLabel = t('examEnglish');
+              else if (task.output_style === 'business_english') styleLabel = t('businessEnglish');
+
               return (
                 <div
                   key={task.id}
-                  className={`task-card status-${task.status}`}
+                  className="task-dash-row"
                 >
-                  {/* Row 1: Header */}
-                  <div className="task-card-header">
-                    <div className="task-card-meta">
-                      <div className="task-card-icon-wrapper">
-                        {task.input_type === 'page_range' ? <FileText size={16} /> : <Wand2 size={16} />}
-                      </div>
-                      <div className="task-card-info">
-                        <span className="task-card-title" title={task.source_pdf_name || '粘贴文本转换'}>
-                          {task.input_type === 'page_range' ? task.source_pdf_name : '粘贴文本转换'}
-                        </span>
-                        <div className="task-card-subtitle">
-                          <span>{task.input_type === 'page_range' ? `${t('pageRange')}: ${task.page_expression}` : t('selectedPastedText')}</span>
-                          <span>·</span>
-                          <span className="capitalize">{task.audio_mode === 'bilingual' ? t('bilingual') : task.audio_mode === 'english' ? t('englishOnly') : t('chineseOnly')}</span>
-                        </div>
-                      </div>
+                  {/* Left Column: Icon + Text details */}
+                  <div className="task-dash-left">
+                    <div className={`task-status-indicator-dot status-${task.status}`}>
+                      {task.status === 'completed' ? (
+                        <CheckCircle2 size={16} />
+                      ) : task.status === 'running' ? (
+                        <RefreshCw size={15} className="animate-spin" />
+                      ) : task.status === 'paused' ? (
+                        <Pause size={15} />
+                      ) : task.status === 'failed' ? (
+                        <AlertCircle size={16} />
+                      ) : (
+                        <Circle size={15} />
+                      )}
                     </div>
 
-                    <div className="task-card-status-info">
-                      <span className={`status-badge is-${task.status} text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase`}>
-                        {task.status}
+                    <div className="task-dash-info">
+                      <span className="task-dash-title" title={task.source_pdf_name || '粘贴文本转换'}>
+                        {task.input_type === 'page_range' ? task.source_pdf_name : '粘贴文本转换'}
                       </span>
-                      <span className="text-[10px] text-muted-foreground font-semibold">
-                        {getStageLabel(task.stage, lang)}
-                      </span>
+                      <div className="task-dash-chips">
+                        <span className="task-chip">
+                          {task.input_type === 'page_range' ? `${t('pages')}: ${task.page_expression}` : t('selectedPastedText')}
+                        </span>
+                        {styleLabel && <span className="task-chip">{styleLabel}</span>}
+                        <span className="task-chip is-bilingual">
+                          {task.audio_mode === 'bilingual' ? t('bilingual') : task.audio_mode === 'english' ? t('englishOnly') : t('chineseOnly')}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Row 2: Progress bar */}
-                  {['running', 'pending', 'paused', 'canceling'].includes(task.status) && (
-                    <div className="task-card-progress-wrapper">
-                      <div className="task-card-progress-text">
-                        <span className="text-ring ml-auto">{task.progress}%</span>
+                  {/* Middle Column: Progress and Stage */}
+                  <div className="task-dash-middle">
+                    {['running', 'pending', 'paused', 'canceling'].includes(task.status) ? (
+                      <>
+                        <div className="task-dash-progress-meta">
+                          <span className="task-dash-stage">{getStageLabel(task.stage, lang)}</span>
+                          <span className="task-dash-percentage">{task.progress}%</span>
+                        </div>
+                        <div className="progress-bar-container h-1 rounded-full overflow-hidden bg-secondary">
+                          <div 
+                            className={`progress-bar-fill h-full transition-all duration-500 rounded-full ${
+                              task.status === 'paused' ? 'bg-amber-500' : 'bg-ring'
+                            }`} 
+                            style={{ width: `${task.progress}%` }} 
+                          />
+                        </div>
+                      </>
+                    ) : task.status === 'completed' ? (
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-semibold py-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-ring" />
+                        <span>{t('completed')}</span>
                       </div>
-                      <div className="progress-bar-container h-1.5 rounded-full overflow-hidden bg-secondary">
-                        <div 
-                          className={`progress-bar-fill h-full transition-all duration-500 rounded-full ${
-                            task.status === 'paused' ? 'bg-amber-500' : 'bg-ring'
-                          }`} 
-                          style={{ width: `${task.progress}%` }} 
-                        />
+                    ) : (
+                      <div className="flex flex-col gap-0.5">
+                        <div className="flex items-center gap-1.5 text-[10px] text-destructive font-semibold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-destructive" />
+                          <span>{task.status === 'failed' ? t('failed') : t('canceled')}</span>
+                        </div>
+                        {task.error_message && (
+                          <span className="text-[9px] text-destructive/80 truncate max-w-[150px]" title={task.error_message}>
+                            {task.error_message}
+                          </span>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
-                  {/* Error Message */}
-                  {task.error_message && (
-                    <div className="p-2.5 bg-destructive/10 text-destructive text-[11px] font-medium rounded border border-destructive/20 leading-normal">
-                      {task.error_message}
-                    </div>
-                  )}
-
-                  {/* Row 3: Action Buttons */}
-                  <div className="task-card-actions">
+                  {/* Right Column: Row Action controls */}
+                  <div className="task-dash-right">
+                    {/* Delete Icon (Far Left in actions group) */}
                     {!['pending', 'running', 'canceling'].includes(task.status) && (
                       <Button
                         variant="ghost"
                         size="iconSm"
                         onClick={() => deleteTask(task.id)}
-                        title={t('deleteTask') || '删除任务'}
-                        className="hover:text-destructive hover:bg-destructive/10 mr-auto text-muted-foreground"
+                        title={t('deleteTask')}
+                        className="hover:text-destructive hover:bg-destructive/10 text-muted-foreground"
                       >
-                        <Trash2 size={13} />
+                        <Trash2 size={12.5} />
                       </Button>
                     )}
-                    {/* Running / Pending -> Pause, Cancel */}
+
+                    {/* Active controls: Pause, Resume, Cancel, Retry */}
                     {['pending', 'running'].includes(task.status) && (
                       <>
-                        <Button variant="secondary" size="sm" onClick={() => control(task, 'pause')} className="flex items-center gap-1 text-[10px]">
-                          <Pause size={10} />
-                          <span>{t('pause')}</span>
+                        <Button variant="secondary" size="iconSm" onClick={() => control(task, 'pause')} title={t('pause')}>
+                          <Pause size={12} />
                         </Button>
-                        <Button variant="destructive" size="sm" onClick={() => control(task, 'cancel')} className="flex items-center gap-1 text-[10px] hover:bg-destructive/90">
-                          <XCircle size={10} />
-                          <span>{t('cancel')}</span>
+                        <Button variant="destructive" size="iconSm" onClick={() => control(task, 'cancel')} title={t('cancel')} className="hover:bg-destructive/90">
+                          <XCircle size={12} />
                         </Button>
                       </>
                     )}
 
-                    {/* Paused -> Resume, Cancel */}
                     {task.status === 'paused' && (
                       <>
-                        <Button variant="secondary" size="sm" onClick={() => control(task, 'resume')} className="flex items-center gap-1 text-[10px]">
-                          <Play size={10} />
-                          <span>{t('resume')}</span>
+                        <Button variant="secondary" size="iconSm" onClick={() => control(task, 'resume')} title={t('resume')}>
+                          <Play size={12} />
                         </Button>
-                        <Button variant="destructive" size="sm" onClick={() => control(task, 'cancel')} className="flex items-center gap-1 text-[10px] hover:bg-destructive/90">
-                          <XCircle size={10} />
-                          <span>{t('cancel')}</span>
+                        <Button variant="destructive" size="iconSm" onClick={() => control(task, 'cancel')} title={t('cancel')} className="hover:bg-destructive/90">
+                          <XCircle size={12} />
                         </Button>
                       </>
                     )}
 
-                    {/* Failed / Canceled -> Retry */}
                     {['failed', 'canceled'].includes(task.status) && (
-                      <Button variant="secondary" size="sm" onClick={() => control(task, 'retry')} className="flex items-center gap-1 text-[10px]">
-                        <RotateCcw size={10} />
-                        <span>{t('retry')}</span>
+                      <Button variant="secondary" size="iconSm" onClick={() => control(task, 'retry')} title={t('retry')}>
+                        <RotateCcw size={12} />
                       </Button>
                     )}
 
-                    {/* Completed -> Play Audio */}
+                    {/* Play Listen Button */}
                     {task.status === 'completed' && audio && (
                       <Button
                         variant={isAudioActive ? 'default' : 'secondary'}
                         size="sm"
-                        className="flex items-center gap-1 text-[10px]"
+                        className="flex items-center gap-1 text-[10px] h-7 px-2.5"
                         onClick={() => {
                           if (isAudioActive) {
                             togglePlay();
@@ -281,7 +333,7 @@ export default function TaskManagerPane() {
                       </Button>
                     )}
 
-                    {/* Manual Refresh */}
+                    {/* Manual Status Loader Spinner */}
                     {['pending', 'running', 'canceling'].includes(task.status) && (
                       <Button variant="ghost" size="iconSm" onClick={() => load(false)} title={t('refreshStatus')}>
                         <RefreshCw size={11} className="text-muted-foreground" />

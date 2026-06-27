@@ -15,6 +15,8 @@ export const translations = {
     language: '语言 / Language',
     converting: '个正在转换',
     failed: '个失败',
+    completed: '已完成',
+    canceled: '已取消',
     enterAccessCode: '输入访问密码以解锁工作区',
     accessCode: '访问密码',
     unlockDashboard: '解锁工作区',
@@ -68,6 +70,10 @@ export const translations = {
     deleteConfirmTask: '确定要删除此任务吗？关联的音频文件也会被清理。',
     deleteSuccess: '删除成功',
     deleteTask: '删除任务',
+    statTotal: '总任务',
+    statRunning: '进行中',
+    statCompleted: '已完成',
+    statFailed: '已失败',
 
     // LibraryPane
     searchInLibrary: '搜索文档...',
@@ -168,6 +174,8 @@ export const translations = {
     language: 'Language',
     converting: 'converting',
     failed: 'failed',
+    completed: 'Completed',
+    canceled: 'Canceled',
     enterAccessCode: 'Enter access code to unlock workspace',
     accessCode: 'Access Code',
     unlockDashboard: 'Unlock Dashboard',
@@ -221,6 +229,10 @@ export const translations = {
     deleteConfirmTask: 'Are you sure you want to delete this task? Associated audio files will also be cleaned up.',
     deleteSuccess: 'Deleted successfully',
     deleteTask: 'Delete Task',
+    statTotal: 'Total',
+    statRunning: 'Running',
+    statCompleted: 'Completed',
+    statFailed: 'Failed',
 
     // LibraryPane
     searchInLibrary: 'Search in library...',
