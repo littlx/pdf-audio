@@ -52,10 +52,40 @@ def _is_noise(line: str) -> bool:
 
 
 def _clean_text(text: str) -> str:
-    text = re.sub(r"(\w+)-\n(\w+)", r"\1\2", text)
-    text = re.sub(r"(?<![.!?:;])\n(?=[a-zA-Z])", " ", text)
-    lines = [line.strip() for line in text.splitlines() if not _is_noise(line)]
-    joined = "\n".join(lines)
+    # 1. Handle hyphenated word wraps at line ends
+    text = re.sub(r"(\w+)-\n\s*(\w+)", r"\1\2", text)
+    
+    # 2. Split by double newlines to process paragraphs separately
+    paragraphs = text.split("\n\n")
+    cleaned_paragraphs = []
+    
+    for para in paragraphs:
+        # Filter noise lines first
+        lines = [line.strip() for line in para.splitlines() if not _is_noise(line)]
+        if not lines:
+            continue
+            
+        merged_para = ""
+        for line in lines:
+            if not merged_para:
+                merged_para = line
+            else:
+                last_char = merged_para[-1]
+                first_char = line[0]
+                
+                # Check if either character is Chinese
+                is_chinese = (
+                    ('\u4e00' <= last_char <= '\u9fa5') or 
+                    ('\u4e00' <= first_char <= '\u9fa5')
+                )
+                if is_chinese:
+                    merged_para += line
+                else:
+                    merged_para += " " + line
+        if merged_para:
+            cleaned_paragraphs.append(merged_para)
+            
+    joined = "\n\n".join(cleaned_paragraphs)
     joined = re.sub(r"[ \t]+", " ", joined)
     joined = re.sub(r"\n{3,}", "\n\n", joined)
     return joined.strip()
@@ -106,7 +136,7 @@ def _extract_page_text(page: fitz.Page) -> str:
         body_blocks.append((x0, y0, x1, y1, text))
 
     ordered = sorted(body_blocks, key=functools.cmp_to_key(compare_blocks))
-    return "\n".join(block[4].strip() for block in ordered)
+    return "\n\n".join(block[4].strip() for block in ordered)
 
 
 def extract_text_from_pdf(pdf_path: str, page_expression: str, total_pages: int) -> tuple[str, list[int]]:
