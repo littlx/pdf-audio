@@ -25,6 +25,11 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Only handle http and https requests to avoid chrome-extension and devtools errors
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    return;
+  }
+
   // Handle proactive offline cached audio files and subtitle files
   if (url.pathname.includes('/api/audios/') && (url.pathname.endsWith('/file') || url.pathname.includes('/subtitles.'))) {
     event.respondWith(
