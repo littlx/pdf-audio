@@ -1744,4 +1744,8 @@ audio {
     min-width: 28px !important;
     justify-content: center !important;
   }
+  
+  .edit-title-btn {
+    opacity: 0.65 !important;
+  }
 }
