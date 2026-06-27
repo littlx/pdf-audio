@@ -386,6 +386,7 @@ html.dark .pane-tab-btn:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 12px 8px;
   border: none;
   border-bottom: 1px dashed var(--border);
@@ -459,6 +460,7 @@ html.dark .pane-tab-btn:hover {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
 }
 
 /* PDF Reader Pane */
