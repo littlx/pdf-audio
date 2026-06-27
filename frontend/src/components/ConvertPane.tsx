@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp, Search, Loader2, Maximize2, Check, Sparkles } from 'lucide-react';
+import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp, Search, Loader2, Maximize2, Check, Sparkles, ChevronRight, Settings2, AlertCircle } from 'lucide-react';
 import { api } from '../api/client';
 import type { AppSettings, AudioFile, PdfFile, Task } from '../api/types';
 import { Button } from './ui/button';
 import { useT } from '../context/I18nContext';
 import { useToast } from '../context/ToastContext';
+import { usePlayer } from '../context/PlayerContext';
 
 const defaultSettings = {
   default_bilingual_format: 'sentence_pair',
@@ -71,6 +72,7 @@ const mergeTask = (prev: Task | null, incoming: Task): Task => {
 export default function ConvertPane({ pdf, initialText = '', onConversionComplete, onTaskCreated, onJumpToPdfPage }: ConvertPaneProps) {
   const { t, lang } = useT();
   const { toast } = useToast();
+  const { activeAudio, setActiveAudio, isPlaying, togglePlay } = usePlayer();
 
   const [pageExpression, setPageExpression] = useState('1');
   const [format, setFormat] = useState<AppSettings['default_bilingual_format']>(defaultSettings.default_bilingual_format);
@@ -84,6 +86,8 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   const [completedAudio, setCompletedAudio] = useState<AudioFile | null>(null);
   const [showSegments, setShowSegments] = useState(false);
   const [customTitle, setCustomTitle] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [extractMode, setExtractMode] = useState<'local' | 'ai'>('local');
   const notifiedTaskId = useRef<string | null>(null);
 
   const [isExtracting, setIsExtracting] = useState(false);
@@ -106,9 +110,9 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       }
       setDraftStatus('idle');
       toast(
-        lang === 'zh' 
-          ? '文本提取成功，已为您切换到“文本”编辑模式。' 
-          : 'Text extracted successfully. Switched to Text edit mode.', 
+        lang === 'zh'
+          ? '文本提取成功，已为您切换到"文本"编辑模式。'
+          : 'Text extracted successfully. Switched to Text edit mode.',
         'success'
       );
     } catch (err: any) {
@@ -121,12 +125,44 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
   };
 
+  const handleAiExtractText = async () => {
+    if (!pdf) return;
+    setIsExtracting(true);
+    try {
+      const res = await api<{ text: string }>(`/api/pdfs/${pdf.id}/extract-ai`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ page_expression: pageExpression }),
+      });
+      setOriginalExtractedText(res.text);
+      setTextToConvert(res.text);
+      setEditableText(res.text);
+      setMode('text');
+      if (pdf) {
+        localStorage.removeItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`);
+      }
+      setDraftStatus('idle');
+      toast(
+        lang === 'zh'
+          ? 'AI 文本提取成功，已为您切换到"文本"编辑模式。'
+          : 'AI text extraction successful. Switched to Text edit mode.',
+        'success'
+      );
+    } catch (err: any) {
+      toast(
+        err?.message || (lang === 'zh' ? 'AI 解析失败，请检查 AI 配置或尝试本地解析。' : 'AI extraction failed. Check AI settings or try Local Extract.'),
+        'error'
+      );
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
   const [originalExtractedText, setOriginalExtractedText] = useState('');
   const [isFullscreenEditorOpen, setIsFullscreenEditorOpen] = useState(false);
   const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
-  // Reset PDF-scoped state when target PDF changes. App also keys this component,
-  // but this keeps the pane safe if it is reused elsewhere without a key.
+  // Reset PDF-scoped state when target PDF changes.
   useEffect(() => {
     setPageExpression('1');
     setTask(null);
@@ -137,6 +173,8 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     setOriginalExtractedText('');
     setIsFullscreenEditorOpen(false);
     setDraftStatus('idle');
+    setShowAdvanced(false);
+    setExtractMode('local');
     setIsExtracting(false);
     notifiedTaskId.current = null;
 
@@ -203,7 +241,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     if (!textarea) return;
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    
+
     if (start === end) {
       toast(
         lang === 'zh' ? '请先在文本框中选中需要合并的多行文本！' : 'Please select multiple lines in the text area first!',
@@ -211,10 +249,10 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       );
       return;
     }
-    
+
     const selectedText = textToConvert.substring(start, end);
     const lines = selectedText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    
+
     if (lines.length <= 1) {
       toast(
         lang === 'zh' ? '所选内容不足多行，无需合并。' : 'Selected text is not multi-line.',
@@ -222,7 +260,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       );
       return;
     }
-    
+
     let merged = '';
     for (let i = 0; i < lines.length; i++) {
       if (i === 0) {
@@ -232,11 +270,11 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         const curr = lines[i];
         const lastCharOfPrev = prev.slice(-1);
         const firstCharOfCurr = curr.charAt(0);
-        
+
         // Check for drop cap merging (e.g., 'W' + 'HEN' -> 'WHEN')
         const isDropCap = prev.length === 1 && /^[A-Z]$/.test(prev) && /^[A-Z]$/.test(firstCharOfCurr);
         const isChinese = /[\u4e00-\u9fa5]/.test(lastCharOfPrev) || /[\u4e00-\u9fa5]/.test(firstCharOfCurr);
-        
+
         if (isDropCap) {
           merged += curr;
         } else if (isChinese) {
@@ -246,11 +284,10 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         }
       }
     }
-    
-    
+
     // Focus first
     textarea.focus();
-    
+
     let success = false;
     try {
       // Use document.execCommand('insertText') to preserve native browser undo/redo history (Ctrl+Z / Cmd+Z)
@@ -266,8 +303,8 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
 
     toast(
-      lang === 'zh' 
-        ? `已成功将所选的 ${lines.length} 行合并为 1 行（支持 Cmd/Ctrl+Z 撤销）。` 
+      lang === 'zh'
+        ? `已成功将所选的 ${lines.length} 行合并为 1 行（支持 Cmd/Ctrl+Z 撤销）。`
         : `Successfully merged ${lines.length} lines into 1 (supports Cmd/Ctrl+Z to undo).`,
       'success'
     );
@@ -282,13 +319,13 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   const handleSmartMergeParagraphs = (isFullscreen: boolean) => {
     const textarea = isFullscreen ? fullscreenTextareaRef.current : normalTextareaRef.current;
     if (!textarea) return;
-    
+
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    
+
     let textToFormat = '';
     let isEntireDoc = false;
-    
+
     if (start === end) {
       // No selection: format the entire document
       textToFormat = textToConvert;
@@ -297,33 +334,33 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       // Format only selection
       textToFormat = textToConvert.substring(start, end);
     }
-    
+
     // Apply smart formatting algorithm
     // 1. Split into individual trimmed lines
     const rawLines = textToFormat.split(/\r?\n/).map(line => line.trim());
     if (rawLines.length === 0) return;
-    
+
     // 2. Calculate average line length of WRAPPED lines (lines that do not end with sentence-ending punctuation)
     const wrappedLengths: number[] = [];
     const sentenceTerminatorRegex = /[.!?。！？”"]$/;
-    
+
     for (const line of rawLines) {
       if (line.length <= 10) continue;
       if (!sentenceTerminatorRegex.test(line)) {
         wrappedLengths.push(line.length);
       }
     }
-    
-    const avgLen = wrappedLengths.length > 0 
-      ? wrappedLengths.reduce((a, b) => a + b, 0) / wrappedLengths.length 
+
+    const avgLen = wrappedLengths.length > 0
+      ? wrappedLengths.reduce((a, b) => a + b, 0) / wrappedLengths.length
       : 40;
-      
+
     const shortLineThreshold = Math.max(20, Math.floor(avgLen - 4));
-    
+
     // 3. Segment lines into paragraphs based on blank lines OR (short line + sentence terminator)
     const paragraphs: string[][] = [];
     let currentPara: string[] = [];
-    
+
     for (const line of rawLines) {
       if (!line) {
         if (currentPara.length > 0) {
@@ -332,7 +369,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         }
         continue;
       }
-      
+
       // Check if the current line starts a list item or table row
       let isListStart = false;
       if (/^([-\*•▪◦●■→⏩➢▶▲\u2022\u25e6\u25aa\u25fe])/.test(line)) {
@@ -342,27 +379,27 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       } else if (/^([a-zA-Z][\.\)]\s)/.test(line)) {
         isListStart = true;
       }
-      
+
       if (isListStart && currentPara.length > 0) {
         paragraphs.push(currentPara);
         currentPara = [];
       }
-      
+
       currentPara.push(line);
-      
+
       const endsWithPunctuation = sentenceTerminatorRegex.test(line);
       const isShort = line.length < shortLineThreshold;
-      
+
       if (endsWithPunctuation && isShort) {
         paragraphs.push(currentPara);
         currentPara = [];
       }
     }
-    
+
     if (currentPara.length > 0) {
       paragraphs.push(currentPara);
     }
-    
+
     // 4. Merge lines within each paragraph
     const cleanedParagraphs = paragraphs.map(paraLines => {
       let mergedPara = '';
@@ -373,10 +410,10 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         } else {
           const lastChar = mergedPara.slice(-1);
           const firstChar = line.charAt(0);
-          
+
           const isDropCap = mergedPara.length === 1 && /^[A-Z]$/.test(mergedPara) && /^[A-Z]$/.test(firstChar);
           const isChinese = /[\u4e00-\u9fa5]/.test(lastChar) || /[\u4e00-\u9fa5]/.test(firstChar);
-          
+
           if (isDropCap) {
             mergedPara += line;
           } else if (isChinese) {
@@ -393,22 +430,22 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       }
       return mergedPara;
     }).filter(Boolean);
-    
+
     const formatted = cleanedParagraphs.join('\n\n');
-    
+
     // Apply replacement via native execCommand to keep Undo history
     textarea.focus();
     if (isEntireDoc) {
       textarea.select();
     }
-    
+
     let success = false;
     try {
       success = document.execCommand('insertText', false, formatted);
     } catch (e) {
       console.warn('execCommand insertText failed in smart merge:', e);
     }
-    
+
     if (!success) {
       if (isEntireDoc) {
         setTextToConvert(formatted);
@@ -419,14 +456,14 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         setEditableText(newText);
       }
     }
-    
+
     toast(
-      lang === 'zh' 
+      lang === 'zh'
         ? (isEntireDoc ? '已成功对全文完成智能排版。' : '已成功对选中内容完成智能段落合并。')
         : (isEntireDoc ? 'Successfully applied smart merge to entire text.' : 'Successfully applied smart merge to selection.'),
       'success'
     );
-    
+
     // Re-select formatted text
     if (!isEntireDoc) {
       setTimeout(() => {
@@ -463,13 +500,13 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     { label: 'AI 双语对齐与翻译', desc: '利用大模型生成精准中英对照' },
     { label: '分句语音合成', desc: '生成高品质双语朗读音频切片' },
     { label: '音频合成与正规化', desc: '拼接音频并优化电平与降噪' },
-    { label: '生成同步双语字幕', desc: '生成与音频同步的播放器字幕' }
+    { label: '生成同步双语字幕', desc: '生成与音频同步的播放器字幕' },
   ] : [
     { label: 'Extract PDF Text', desc: 'Parsing original content from PDF' },
     { label: 'AI Bilingual Translation', desc: 'Generating translation and alignment' },
     { label: 'Sentence Voice Synthesis', desc: 'Generating read-aloud audio clips' },
     { label: 'Audio Merging & Normalizing', desc: 'Merging audio and optimizing volume' },
-    { label: 'Generate Synced Subtitles', desc: 'Rendering synced player subtitles' }
+    { label: 'Generate Synced Subtitles', desc: 'Rendering synced player subtitles' },
   ];
 
   const stepIndex = task ? getStepIndex(task.stage || 'pending') : 0;
@@ -550,7 +587,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   // SSE and Polling fallback for task tracking
   useEffect(() => {
     if (!task) return;
-    
+
     // If the task is already in a terminal state, don't start listening or polling
     if (['completed', 'failed', 'canceled'].includes(task.status)) {
       return;
@@ -566,7 +603,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         try {
           const data = await api<Task>(`/api/tasks/${task.id}`);
           if (isCleanedUp) return;
-          
+
           setTask(prev => {
             const merged = mergeTask(prev, data);
             // If the task reached a terminal state, stop polling
@@ -651,50 +688,96 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
   }
 
+  const isTaskVisible = task !== null;
+
   return (
-    <div className="convert-pane-grid">
-      {/* Target Selector Header */}
-      <div className="p-3 bg-muted border border-border rounded-xl flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
-          <FileText size={16} className="text-ring flex-shrink-0" />
-          <div className="flex flex-col min-w-0">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-              {t('selectedTarget')}
-            </span>
-            <span className="text-xs font-semibold truncate">
-              {pdf ? pdf.original_name : t('noFileSelected')}
-            </span>
+    <div className="convert-pane">
+      {/* ── Section 1: Config Header Bar ── */}
+      <div className="convert-config-section">
+        {/* Target + Mode row */}
+        <div className="convert-config-row">
+          {/* Target info */}
+          <div className="convert-target-info">
+            <FileText size={14} className="text-ring shrink-0" />
+            <div className="convert-target-name">
+              <span className="convert-target-label">{t('selectedTarget')}</span>
+              <span className="convert-target-value">
+                {pdf ? pdf.original_name : t('noFileSelected')}
+              </span>
+            </div>
+            {pdf && (
+              <span className="convert-target-pages">
+                {pdf.page_count} {t('pagesCount')}
+              </span>
+            )}
+          </div>
+
+          {/* Mode switch */}
+          <div className="convert-mode-group">
+            <button
+              className={`convert-mode-btn ${mode === 'pages' ? 'is-active' : ''}`}
+              onClick={() => setMode('pages')}
+            >
+              {t('pageRange')}
+            </button>
+            <button
+              className={`convert-mode-btn ${mode === 'text' ? 'is-active' : ''}`}
+              onClick={() => setMode('text')}
+            >
+              {t('selectedPastedText')}
+            </button>
           </div>
         </div>
-        {pdf && (
-          <span className="text-[11px] font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded flex-shrink-0 whitespace-nowrap">
-            {pdf.page_count} {t('pagesCount')}
-          </span>
-        )}
-      </div>
 
-      {/* Mode Tabs */}
-      <div className="convert-mode-selector">
-        <button
-          className={`convert-mode-btn text-xs ${mode === 'pages' ? 'is-active' : ''}`}
-          onClick={() => setMode('pages')}
-        >
-          {t('pageRange')}
-        </button>
-        <button
-          className={`convert-mode-btn text-xs ${mode === 'text' ? 'is-active' : ''}`}
-          onClick={() => setMode('text')}
-        >
-          {t('selectedPastedText')}
-        </button>
-      </div>
-
-      {/* Settings Options Card */}
-      <div className="convert-form-card">
-        {mode === 'pages' ? (
-          <div className="form-group">
-            <div className="flex justify-between items-center mb-1.5">
-              <label htmlFor="pages-input" className="mb-0">{t('pageExpression')}</label>
+        {/* Input area: pages or text */}
+        <div className="convert-input-area">
+          {mode === 'pages' ? (
+            <div className="convert-pages-row">
+              <input
+                id="pages-input"
+                value={pageExpression}
+                onChange={(e) => setPageExpression(e.target.value)}
+                placeholder={t('pageExpressionPlaceholder')}
+                className="convert-input flex-1"
+              />
+              {pdf && (
+                <div className="convert-extract-group">
+                  <div className="convert-extract-mode">
+                    <button
+                      type="button"
+                      className={`convert-extract-mode-btn ${extractMode === 'local' ? 'is-active' : ''}`}
+                      onClick={() => setExtractMode('local')}
+                    >
+                      {t('extractLocal')}
+                    </button>
+                    <button
+                      type="button"
+                      className={`convert-extract-mode-btn ${extractMode === 'ai' ? 'is-active' : ''}`}
+                      onClick={() => setExtractMode('ai')}
+                    >
+                      {t('extractAi')}
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isExtracting || !pageExpression.trim()}
+                    onClick={extractMode === 'local' ? handlePreExtractText : handleAiExtractText}
+                    className="convert-extract-btn"
+                  >
+                    {isExtracting ? (
+                      <>
+                        <Loader2 size={13} className="animate-spin" />
+                        <span>{extractMode === 'ai' ? t('extractingAi') : (lang === 'zh' ? '提取中...' : 'Extracting...')}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Search size={13} />
+                        <span>{lang === 'zh' ? '预解析文本并编辑' : 'Pre-extract & Edit'}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
               {pdf && onJumpToPdfPage && (
                 <button
                   type="button"
@@ -705,263 +788,252 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                       onJumpToPdfPage(pNum);
                     }
                   }}
-                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0"
+                  className="convert-link-btn"
                 >
                   <FileText size={13} />
-                  <span>{t('locatePage') || '在阅读器中定位'}</span>
+                  <span>{t('locatePage')}</span>
                 </button>
               )}
             </div>
-            <input
-              id="pages-input"
-              value={pageExpression}
-              onChange={(e) => setPageExpression(e.target.value)}
-              placeholder={t('pageExpressionPlaceholder')}
-            />
-            {pdf && (
-              <button
-                type="button"
-                disabled={isExtracting || !pageExpression.trim()}
-                onClick={handlePreExtractText}
-                className="mt-2 text-xs py-1.5 px-3 rounded border border-border bg-[#1f2937]/5 hover:bg-[#1f2937]/10 transition-colors flex items-center justify-center gap-1.5 w-full font-medium"
-              >
-                {isExtracting ? (
-                  <>
-                    <Loader2 size={13} className="animate-spin text-muted-foreground/60" />
-                    <span>{lang === 'zh' ? '正在提取文本...' : 'Extracting text...'}</span>
-                  </>
-                ) : (
-                  <>
-                    <Search size={13} />
-                    <span>{lang === 'zh' ? '预解析文本并编辑' : 'Pre-extract & Edit Text'}</span>
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="form-group flex flex-col gap-1.5">
-            <div className="flex justify-between items-center">
-              <label htmlFor="raw-text-input" className="mb-0 flex items-center gap-1.5 font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">
-                <span>{t('textToConvert')}</span>
-                {draftStatus === 'saving' && (
-                  <span className="text-[10px] text-muted-foreground animate-pulse font-normal lowercase">
-                    ({lang === 'zh' ? '正在保存...' : 'saving...'})
-                  </span>
-                )}
-                {draftStatus === 'saved' && (
-                  <span className="text-[10px] text-green-600 flex items-center gap-0.5 font-normal lowercase">
-                    <Check size={11} /> {lang === 'zh' ? '已存草稿' : 'autosaved'}
-                  </span>
-                )}
-              </label>
-              <div className="flex items-center gap-3">
-                {originalExtractedText && (
+          ) : (
+            <div className="convert-text-block">
+              <div className="convert-text-header">
+                <div className="convert-text-title-row">
+                  <span className="convert-text-label">{t('textToConvert')}</span>
+                  {draftStatus === 'saving' && (
+                    <span className="convert-draft-status is-saving">
+                      ({lang === 'zh' ? '保存中...' : 'saving...'})
+                    </span>
+                  )}
+                  {draftStatus === 'saved' && (
+                    <span className="convert-draft-status is-saved">
+                      <Check size={11} /> {lang === 'zh' ? '已存草稿' : 'autosaved'}
+                    </span>
+                  )}
+                </div>
+                <div className="convert-text-actions">
+                  {originalExtractedText && (
+                    <button
+                      type="button"
+                      onClick={handleRevertToOriginal}
+                      className="convert-text-action-btn"
+                      title={lang === 'zh' ? '恢复为初始 PDF 提取原文' : 'Revert to original extracted text'}
+                    >
+                      <RotateCcw size={11} />
+                      <span>{lang === 'zh' ? '恢复原文' : 'Revert'}</span>
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={handleRevertToOriginal}
-                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0 transition-colors"
-                    title={lang === 'zh' ? '恢复为初始 PDF 提取原文' : 'Revert to original extracted text'}
+                    onClick={() => setIsFullscreenEditorOpen(true)}
+                    className="convert-text-action-btn is-primary"
                   >
-                    <RotateCcw size={11} />
-                    <span>{lang === 'zh' ? '恢复原文' : 'Revert'}</span>
+                    <Maximize2 size={11} />
+                    <span>{lang === 'zh' ? '全屏编辑' : 'Fullscreen'}</span>
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setIsFullscreenEditorOpen(true)}
-                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0"
-                >
-                  <Maximize2 size={11} />
-                  <span>{lang === 'zh' ? '全屏编辑' : 'Fullscreen'}</span>
-                </button>
+                </div>
+              </div>
+
+              <textarea
+                id="raw-text-input"
+                ref={normalTextareaRef}
+                value={textToConvert}
+                onChange={(e) => {
+                  setTextToConvert(e.target.value);
+                  setEditableText(e.target.value);
+                }}
+                rows={8}
+                placeholder={t('pasteTextPlaceholder')}
+                className="convert-textarea"
+                onKeyDown={(e) => handleEditorKeyDown(e, false)}
+              />
+
+              <div className="convert-text-footer">
+                <span className="convert-text-footer-left">
+                  {draftStatus === 'saved' && (lang === 'zh' ? '草稿已保存在本地' : 'Draft saved locally')}
+                </span>
+                <span className="convert-text-footer-right">
+                  {textToConvert.trim().length} {t('chars')} ({t('textMinLength')})
+                </span>
               </div>
             </div>
-            
-            <textarea
-              id="raw-text-input"
-              ref={normalTextareaRef}
-              value={textToConvert}
-              onChange={(e) => {
-                setTextToConvert(e.target.value);
-                setEditableText(e.target.value);
-              }}
-              rows={12}
-              placeholder={t('pasteTextPlaceholder')}
-              className="w-full font-sans text-xs leading-relaxed p-3 border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
-              style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
-              onKeyDown={(e) => handleEditorKeyDown(e, false)}
-            />
-            
-            <div className="flex justify-between items-center text-[10px] text-muted-foreground font-medium mt-0.5">
-              <span>
-                {draftStatus === 'saved' && (lang === 'zh' ? '草稿已保存在本地，不怕刷新' : 'Draft saved locally')}
-              </span>
-              <span>
-                {textToConvert.trim().length} {t('chars')} ({t('textMinLength')})
-              </span>
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        <div className="form-group">
-          <label htmlFor="custom-title-input">{t('audioName') || '音频名称'}</label>
+        {/* Audio Name */}
+        <div className="convert-name-row">
           <input
             id="custom-title-input"
             value={customTitle}
             onChange={(e) => setCustomTitle(e.target.value)}
-            placeholder={t('audioNamePlaceholder') || '输入生成音频的自定义名称（可选）'}
-            className="text-xs"
+            placeholder={t('audioNamePlaceholder')}
+            className="convert-input"
           />
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <div className="form-group">
-            <label htmlFor="format-select">{t('format')}</label>
-            <select
-              id="format-select"
-              value={format}
-              onChange={(e) => setFormat(e.target.value as AppSettings['default_bilingual_format'])}
-              className="text-xs"
-            >
-              <option value="sentence_pair">{t('sentencePair')}</option>
-              <option value="paragraph_pair">{t('paragraphPair')}</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label htmlFor="style-select">{t('style')}</label>
-            <select
-              id="style-select"
-              value={style}
-              onChange={(e) => setStyle(e.target.value as AppSettings['default_output_style'])}
-              className="text-xs"
-            >
-              <option value="faithful">{t('faithful')}</option>
-              <option value="plain_explanation">{t('plainExplanation')}</option>
-              <option value="child_friendly">{t('childFriendly')}</option>
-              <option value="exam_english">{t('examEnglish')}</option>
-              <option value="business_english">{t('businessEnglish')}</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label htmlFor="audio-mode-select">{t('audioMode')}</label>
-            <select
-              id="audio-mode-select"
-              value={audioMode}
-              onChange={(e) => setAudioMode(e.target.value)}
-              className="text-xs"
-            >
-              <option value="bilingual">{t('bilingual')}</option>
-              <option value="english">{t('englishOnly')}</option>
-              <option value="chinese">{t('chineseOnly')}</option>
-            </select>
+        {/* Advanced Settings Toggle */}
+        <div className="convert-advanced-toggle">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="convert-toggle-btn"
+          >
+            <Settings2 size={13} />
+            <span>{t('advancedSettings')}</span>
+            <ChevronRight size={13} className={`convert-toggle-arrow ${showAdvanced ? 'is-open' : ''}`} />
+          </button>
+
+          <div className={`convert-advanced-body ${showAdvanced ? 'is-open' : ''}`}>
+            <div className="convert-advanced-grid">
+              <div className="convert-advanced-field">
+                <label htmlFor="format-select">{t('format')}</label>
+                <select
+                  id="format-select"
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value as AppSettings['default_bilingual_format'])}
+                >
+                  <option value="sentence_pair">{t('sentencePair')}</option>
+                  <option value="paragraph_pair">{t('paragraphPair')}</option>
+                </select>
+              </div>
+              <div className="convert-advanced-field">
+                <label htmlFor="style-select">{t('style')}</label>
+                <select
+                  id="style-select"
+                  value={style}
+                  onChange={(e) => setStyle(e.target.value as AppSettings['default_output_style'])}
+                >
+                  <option value="faithful">{t('faithful')}</option>
+                  <option value="plain_explanation">{t('plainExplanation')}</option>
+                  <option value="child_friendly">{t('childFriendly')}</option>
+                  <option value="exam_english">{t('examEnglish')}</option>
+                  <option value="business_english">{t('businessEnglish')}</option>
+                </select>
+              </div>
+              <div className="convert-advanced-field">
+                <label htmlFor="audio-mode-select">{t('audioMode')}</label>
+                <select
+                  id="audio-mode-select"
+                  value={audioMode}
+                  onChange={(e) => setAudioMode(e.target.value)}
+                >
+                  <option value="bilingual">{t('bilingual')}</option>
+                  <option value="english">{t('englishOnly')}</option>
+                  <option value="chinese">{t('chineseOnly')}</option>
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
+        {/* Generate Button */}
         <Button
           onClick={createTask}
           disabled={(mode === 'pages' && !pdf) || (mode === 'text' && textToConvert.trim().length < 20)}
-          className="btn-primary-gradient h-10 text-xs mt-2"
+          className="convert-generate-btn"
         >
           {t('startGenerating')}
         </Button>
+
+        {error && (
+          <div className="convert-error">
+            <AlertCircle size={14} />
+            <span>{error}</span>
+          </div>
+        )}
       </div>
 
-      {error && <div className="p-3 bg-destructive/15 text-destructive text-xs font-bold rounded-lg">{error}</div>}
-
-      {/* Task Status Widget */}
-      {task && (
-        <div className={`task-status-widget status-${task.status}`}>
-          <div className="task-progress-header">
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                {t('currentTask')}
-              </span>
-              <span className="text-xs font-bold flex items-center gap-1.5">
-                <span className={`status-badge is-${task.status}`}>{task.status}</span>
-              </span>
+      {/* ── Section 2: Task Area ── */}
+      {isTaskVisible && (
+        <div className={`convert-task-section status-${task.status}`}>
+          {/* Progress header */}
+          <div className="convert-task-header">
+            <div className="convert-task-header-left">
+              <span className="convert-task-label">{t('currentTask')}</span>
+              <span className={`status-badge is-${task.status}`}>{task.status}</span>
             </div>
-            <span className="text-sm font-extrabold text-ring">{task.progress}%</span>
+            <span className="convert-task-percent">{task.progress}%</span>
           </div>
 
-          <div className="progress-bar-container">
-            <div className="progress-bar-fill" style={{ width: `${task.progress}%` }} />
+          <div className="convert-progress-bar">
+            <div className="convert-progress-fill" style={{ width: `${task.progress}%` }} />
           </div>
 
-          {/* Task Stepper Roadmap */}
-          <div className="task-roadmap-container">
-            <div className="task-roadmap-track">
-              {steps.map((step, idx) => {
-                const isCompleted = stepIndex > idx;
-                const isActive = stepIndex === idx && task.status === 'running';
-                const isFailed = stepIndex === idx && task.status === 'failed';
-                const isPaused = stepIndex === idx && task.status === 'paused';
-                const isCanceled = stepIndex === idx && task.status === 'canceled';
+          {/* Vertical Timeline */}
+          <div className="convert-timeline">
+            {steps.map((step, idx) => {
+              const isCompleted = stepIndex > idx;
+              const isActive = stepIndex === idx && task.status === 'running';
+              const isFailed = stepIndex === idx && task.status === 'failed';
+              const isPaused = stepIndex === idx && task.status === 'paused';
+              const isCanceled = stepIndex === idx && task.status === 'canceled';
 
-                let dotClass = 'is-pending';
-                if (isCompleted) dotClass = 'is-completed';
-                else if (isActive) dotClass = 'is-active';
-                else if (isFailed) dotClass = 'is-failed';
-                else if (isPaused) dotClass = 'is-paused';
-                else if (isCanceled) dotClass = 'is-canceled';
+              let dotClass = 'is-pending';
+              if (isCompleted) dotClass = 'is-completed';
+              else if (isActive) dotClass = 'is-active';
+              else if (isFailed) dotClass = 'is-failed';
+              else if (isPaused) dotClass = 'is-paused';
+              else if (isCanceled) dotClass = 'is-canceled';
 
-                return (
-                  <div key={idx} className="task-roadmap-node-wrapper">
-                    {idx > 0 && (
-                      <div className={`task-roadmap-line ${stepIndex >= idx ? 'is-active' : ''}`} />
-                    )}
-                    <div className={`task-roadmap-node ${dotClass}`} title={step.label}>
-                      {isCompleted ? '✓' : idx + 1}
-                    </div>
+              return (
+                <div key={idx} className={`convert-timeline-item ${dotClass}`}>
+                  <div className="convert-timeline-line-wrapper">
+                    {idx < steps.length - 1 && <div className="convert-timeline-line" />}
                   </div>
-                );
-              })}
-            </div>
-            {stepIndex < steps.length && (
-              <div className="task-roadmap-active-step">
-                <span className="task-roadmap-active-title">
-                  {steps[Math.min(stepIndex, steps.length - 1)].label}
-                </span>
-                <span className="task-roadmap-active-desc">
-                  {steps[Math.min(stepIndex, steps.length - 1)].desc}
-                </span>
-              </div>
-            )}
+                  <div className={`convert-timeline-dot ${dotClass}`}>
+                    {isCompleted ? (
+                      <Check size={10} strokeWidth={3} />
+                    ) : isFailed ? (
+                      <XCircle size={10} strokeWidth={2} />
+                    ) : isPaused ? (
+                      <Pause size={9} strokeWidth={2} />
+                    ) : isActive ? (
+                      <Loader2 size={10} strokeWidth={2.5} className="animate-spin" />
+                    ) : (
+                      <span className="convert-timeline-dot-num">{idx + 1}</span>
+                    )}
+                  </div>
+                  <div className="convert-timeline-content">
+                    <span className="convert-timeline-title">{step.label}</span>
+                    <span className="convert-timeline-desc">{step.desc}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {task.error_message && (
-            <p className="text-xs text-destructive bg-destructive/10 p-2 rounded border border-destructive/20 font-medium mt-2">
+            <div className="convert-task-error">
               {task.error_message}
-            </p>
+            </div>
           )}
 
-          {/* Task Control Actions */}
-          <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border/50">
+          {/* Task Controls */}
+          <div className="convert-task-controls">
             {canPause(task.status) && (
-              <Button variant="secondary" size="sm" onClick={() => control('pause')} className="flex items-center gap-1 flex-1 text-[11px]">
+              <Button variant="secondary" size="sm" onClick={() => control('pause')} className="convert-ctrl-btn">
                 <Pause size={12} />
                 <span>{t('pause')}</span>
               </Button>
             )}
             {canResume(task.status) && (
-              <Button variant="secondary" size="sm" onClick={() => control('resume')} className="flex items-center gap-1 flex-1 text-[11px]">
+              <Button variant="secondary" size="sm" onClick={() => control('resume')} className="convert-ctrl-btn">
                 <Play size={12} />
                 <span>{t('resume')}</span>
               </Button>
             )}
             {canRetry(task.status) && (
-              <Button variant="secondary" size="sm" onClick={() => control('retry')} className="flex items-center gap-1 flex-1 text-[11px]">
+              <Button variant="secondary" size="sm" onClick={() => control('retry')} className="convert-ctrl-btn">
                 <RotateCcw size={12} />
                 <span>{t('retry')}</span>
               </Button>
             )}
             {canCancel(task.status) && (
-              <Button variant="destructive" size="sm" onClick={() => control('cancel')} className="flex items-center gap-1 text-[11px] hover:bg-destructive/90">
+              <Button variant="destructive" size="sm" onClick={() => control('cancel')} className="convert-ctrl-btn is-destructive">
                 <XCircle size={12} />
                 <span>{t('cancel')}</span>
               </Button>
             )}
-            
             <Button variant="ghost" size="iconSm" onClick={refresh} title={t('refreshStatus')}>
               <RefreshCw size={14} className="text-muted-foreground" />
             </Button>
@@ -969,65 +1041,83 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         </div>
       )}
 
-      {/* Editor to correct transcription/extraction */}
+      {/* ── Section 3: Results / Editor ── */}
+      {/* Text editor when paused or failed */}
       {task && ['pending', 'paused', 'failed'].includes(task.status) && editableText && (
-        <div className="p-4 border border-border rounded-xl flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-              <FileText size={12} /> {t('extractedText')}
-            </span>
-            <span className="text-[10px] text-muted-foreground font-medium">
-              {t('extractedTextHint')}
-            </span>
+        <div className="convert-editor-section">
+          <div className="convert-editor-header">
+            <FileText size={12} />
+            <span>{t('extractedText')}</span>
+            <span className="convert-editor-hint">{t('extractedTextHint')}</span>
           </div>
           <textarea
             value={editableText}
             onChange={(e) => setEditableText(e.target.value)}
             rows={5}
-            className="text-xs"
+            className="convert-editor-textarea"
           />
-          <Button variant="secondary" size="sm" onClick={saveText} className="text-xs h-8">
+          <Button variant="secondary" size="sm" onClick={saveText} className="convert-editor-save-btn">
             {t('saveAndRegenerate')}
           </Button>
         </div>
       )}
 
-      {/* Finished alert */}
+      {/* Completed audio */}
       {completedAudio && (
-        <div className="p-3 bg-accent/30 border border-ring/30 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="convert-completed-section">
+          <div className="convert-completed-left">
             <CheckCircle2 size={16} className="text-ring" />
-            <span className="text-xs font-semibold text-accent-foreground">{t('audioReady')}</span>
+            <span className="convert-completed-text">{t('audioReady')}</span>
           </div>
-          <Button size="sm" asChild className="btn-primary-gradient text-[11px] h-8">
-            <a href={completedAudio.audio_url} target="_blank" rel="noreferrer noopener">
-              {t('downloadMp3')}
-            </a>
-          </Button>
+          <div className="convert-completed-actions">
+            {/* Play button */}
+            <Button
+              variant="accent"
+              size="sm"
+              onClick={() => {
+                if (activeAudio?.id === completedAudio.id) {
+                  togglePlay();
+                } else {
+                  setActiveAudio(completedAudio);
+                }
+              }}
+              className="convert-ctrl-btn"
+            >
+              {activeAudio?.id === completedAudio.id && isPlaying ? (
+                <Pause size={12} />
+              ) : (
+                <Play size={12} />
+              )}
+              <span>{activeAudio?.id === completedAudio.id && isPlaying ? t('pause') : t('play')}</span>
+            </Button>
+            <Button size="sm" asChild className="convert-download-btn">
+              <a href={completedAudio.audio_url} target="_blank" rel="noreferrer noopener">
+                {t('downloadMp3')}
+              </a>
+            </Button>
+          </div>
         </div>
       )}
 
-      {/* Preview Segments */}
+      {/* Bilingual Segment Preview */}
       {task?.segments && task.segments.length > 0 && (
-        <div className="border border-border rounded-xl overflow-hidden">
+        <div className="convert-segments-section">
           <button
-            className="w-full p-3 bg-muted border-none outline-none flex items-center justify-between cursor-pointer"
+            className="convert-segments-toggle"
             onClick={() => setShowSegments(!showSegments)}
           >
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+            <span className="convert-segments-label">
               {t('bilingualSegmentPreview')} ({task.segments.length})
             </span>
-            {showSegments ? <ChevronUp size={14} className="text-muted-foreground" /> : <ChevronDown size={14} className="text-muted-foreground" />}
+            {showSegments ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
           {showSegments && (
-            <div className="max-h-60 overflow-y-auto p-2 flex flex-col gap-1.5 bg-card">
+            <div className="convert-segments-body">
               {task.segments.map((segment) => (
-                <div key={segment.index} className="p-2 border border-border rounded bg-muted/30 text-xs">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[9px] font-bold text-muted-foreground">#{segment.index + 1}</span>
-                  </div>
-                  <p className="font-semibold mb-0.5 leading-relaxed">{segment.english}</p>
-                  <p className="text-muted-foreground leading-relaxed">{segment.chinese}</p>
+                <div key={segment.index} className="convert-segment-item">
+                  <span className="convert-segment-num">#{segment.index + 1}</span>
+                  <p className="convert-segment-en">{segment.english}</p>
+                  <p className="convert-segment-zh">{segment.chinese}</p>
                 </div>
               ))}
             </div>
@@ -1035,36 +1125,33 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         </div>
       )}
 
-      {/* Fullscreen Rich Text Editor Modal */}
+      {/* ── Fullscreen Editor Modal ── */}
       {isFullscreenEditorOpen && (
-        <div className="fixed inset-0 bg-[#0c0a09]/75 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-          <div className="bg-card w-full max-w-4xl h-[90vh] md:h-[80vh] rounded-xl border border-border shadow-2xl overflow-hidden flex flex-col">
+        <div className="convert-fullscreen-overlay">
+          <div className="convert-fullscreen-modal">
             {/* Modal Header */}
-            <div className="p-4 border-b border-border/80 flex justify-between items-center bg-muted/40 shrink-0">
-              <div className="flex flex-col gap-0.5">
-                <h3 className="text-sm font-semibold text-foreground m-0">
+            <div className="convert-fullscreen-header">
+              <div className="convert-fullscreen-title-group">
+                <h3 className="convert-fullscreen-title">
                   {lang === 'zh' ? '全屏文本编辑器' : 'Fullscreen Text Editor'}
                 </h3>
-                <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                <div className="convert-fullscreen-status">
                   {draftStatus === 'saving' && (
-                    <span className="animate-pulse">{lang === 'zh' ? '正在保存到本地...' : 'Saving to local...'}</span>
+                    <span className="animate-pulse">{lang === 'zh' ? '保存中...' : 'Saving...'}</span>
                   )}
                   {draftStatus === 'saved' && (
-                    <span className="text-green-600 flex items-center gap-0.5">
-                      <Check size={11} /> {lang === 'zh' ? '草稿已保存在本地（不怕刷新）' : 'Draft saved locally'}
+                    <span className="text-ring flex items-center gap-1">
+                      <Check size={11} /> {lang === 'zh' ? '草稿已保存' : 'Draft saved'}
                     </span>
-                  )}
-                  {draftStatus === 'idle' && (
-                    <span>{lang === 'zh' ? '内容与本地草稿箱同步' : 'Synchronized'}</span>
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="convert-fullscreen-actions">
                 {originalExtractedText && (
                   <button
                     type="button"
                     onClick={handleRevertToOriginal}
-                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0 transition-colors"
+                    className="convert-fs-action-btn"
                   >
                     <RotateCcw size={12} />
                     <span>{lang === 'zh' ? '恢复原文' : 'Revert'}</span>
@@ -1073,7 +1160,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 <button
                   type="button"
                   onClick={() => handleMergeSelectedLines(true)}
-                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0 transition-colors"
+                  className="convert-fs-action-btn"
                   title={lang === 'zh' ? '将选中的多行文本合并为一行' : 'Merge selected lines into one line'}
                 >
                   <FileText size={12} />
@@ -1082,8 +1169,8 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 <button
                   type="button"
                   onClick={() => handleSmartMergeParagraphs(true)}
-                  className="text-xs text-primary hover:underline flex items-center gap-1 font-medium bg-transparent border-0 cursor-pointer p-0 transition-colors"
-                  title={lang === 'zh' ? '合并段落中的多余换行（未选中时整理全文）' : 'Merge newlines inside paragraphs (formats entire text if no selection)'}
+                  className="convert-fs-action-btn"
+                  title={lang === 'zh' ? '合并段落中的多余换行' : 'Merge newlines inside paragraphs'}
                 >
                   <Sparkles size={12} />
                   <span>{lang === 'zh' ? '智能排版' : 'Smart Format'}</span>
@@ -1091,7 +1178,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 <button
                   type="button"
                   onClick={() => setIsFullscreenEditorOpen(false)}
-                  className="text-xs py-1 px-3 rounded border border-border hover:bg-muted text-foreground transition-colors font-medium cursor-pointer"
+                  className="convert-fs-done-btn"
                 >
                   {lang === 'zh' ? '完成编辑' : 'Done'}
                 </button>
@@ -1099,7 +1186,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 p-4 bg-background overflow-hidden flex flex-col">
+            <div className="convert-fullscreen-body">
               <textarea
                 ref={fullscreenTextareaRef}
                 value={textToConvert}
@@ -1108,22 +1195,19 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                   setEditableText(e.target.value);
                 }}
                 placeholder={t('pasteTextPlaceholder')}
-                className="w-full h-full flex-1 font-sans text-sm leading-relaxed p-4 border border-border/80 rounded-lg bg-card focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none overflow-y-auto"
-                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+                className="convert-fullscreen-textarea"
                 onKeyDown={(e) => handleEditorKeyDown(e, true)}
               />
             </div>
 
             {/* Modal Footer */}
-            <div className="p-3 border-t border-border/80 bg-muted/40 shrink-0 flex justify-between items-center text-xs text-muted-foreground">
-              <span>
-                {lang === 'zh' ? '支持直接编辑修改，修改会自动实时同步。' : 'Auto-saves draft to local storage'}
-              </span>
-              <div className="flex items-center gap-4 font-medium">
-                <span>
+            <div className="convert-fullscreen-footer">
+              <span>{lang === 'zh' ? '支持直接编辑，自动保存草稿' : 'Edit freely — auto-saves draft'}</span>
+              <div className="convert-fullscreen-footer-right">
+                <span className="convert-fullscreen-chars">
                   {textToConvert.trim().length} {t('chars')}
                 </span>
-                <Button size="sm" onClick={() => setIsFullscreenEditorOpen(false)} className="btn-primary-gradient text-[11px] h-8 px-4">
+                <Button size="sm" onClick={() => setIsFullscreenEditorOpen(false)} className="convert-fullscreen-confirm-btn">
                   {lang === 'zh' ? '确定并返回' : 'Confirm & Close'}
                 </Button>
               </div>

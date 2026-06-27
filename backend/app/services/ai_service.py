@@ -119,3 +119,20 @@ async def generate_bilingual_segments(db: Session, text: str, bilingual_format: 
         return extract_json_array(content)
     except Exception:
         return await repair_json_with_ai(db, content)
+
+
+async def extract_text_via_ai(
+    db: Session,
+    raw_text: str,
+    prompt: str,
+    temperature: float = 0.1,
+    timeout: float = 300.0,
+) -> str:
+    """Send raw PDF page text together with a user-provided extraction prompt to
+    an OpenAI-compatible text API. The AI is asked to clean up the raw text —
+    removing headers/footers, reordering multi-column content, etc."""
+    messages = [
+        {"role": "system", "content": "You are a PDF text extraction assistant. Follow the user's instructions precisely to extract and clean text from raw PDF page content."},
+        {"role": "user", "content": f"{prompt}\n\n--- Raw PDF Page Text ---\n{raw_text}"},
+    ]
+    return await _call_chat_completion(db, messages, temperature=temperature, timeout=timeout)

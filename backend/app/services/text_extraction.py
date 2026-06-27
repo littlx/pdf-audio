@@ -1,9 +1,11 @@
 import re
 import functools
+import tempfile
 from pathlib import Path
 
 import fitz
 from fastapi import HTTPException
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 
@@ -218,3 +220,59 @@ def extract_text_from_pdf(pdf_path: str, page_expression: str, total_pages: int)
             detail="This PDF page may be scanned or image-based. OCR is not supported in this version.",
         )
     return cleaned, pages
+
+
+async def extract_text_from_pdf_via_ai(
+    db: Session,
+    pdf_path: str,
+    page_expression: str,
+    total_pages: int,
+    prompt: str,
+) -> tuple[str, list[int]]:
+    """Extract text from selected PDF pages by sending the raw page text
+    (with page markers) to an AI model for cleaning and reordering."""
+    from app.services.ai_service import extract_text_via_ai
+
+    try:
+        pages = parse_page_expression(page_expression, total_pages)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    with fitz.open(Path(pdf_path)) as doc:
+        # 1. Select only the requested pages and save as a temporary PDF
+        temp_pdf = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        temp_pdf_path = temp_pdf.name
+        try:
+            temp_pdf.close()
+            sub_doc = fitz.open()
+            for pn in pages:
+                sub_doc.insert_pdf(doc, from_page=pn - 1, to_page=pn - 1)
+            sub_doc.save(temp_pdf_path)
+            sub_doc.close()
+
+            # 2. Reopen the temp PDF and extract RAW text per page
+            #    Use get_text("text") — plain extraction without block sorting or cleaning
+            sub_doc2 = fitz.open(temp_pdf_path)
+            page_texts: list[str] = []
+            for page_num, page in enumerate(sub_doc2):
+                raw = page.get_text("text")
+                page_texts.append(f"--- Page {pages[page_num]} ---\n{raw}")
+            sub_doc2.close()
+        finally:
+            Path(temp_pdf_path).unlink(missing_ok=True)
+
+    if not page_texts:
+        raise HTTPException(status_code=422, detail="No pages to process")
+
+    # 3. Concatenate raw page text with markers
+    raw_text = "\n\n".join(page_texts)
+
+    # 4. Send to AI for cleaning
+    text = await extract_text_via_ai(db, raw_text, prompt)
+
+    if len(text.strip()) < 80:
+        raise HTTPException(
+            status_code=422,
+            detail="AI extraction returned too little text. The pages may be empty or the AI model is not responding correctly.",
+        )
+    return text.strip(), pages

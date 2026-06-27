@@ -8,13 +8,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.schemas import LastPageUpdate, OkOut, OutlineItem, PdfOut, PdfRename
+from app.api.schemas import LastPageUpdate, OkOut, OutlineItem, PdfExtractAiRequest, PdfExtractOut, PdfExtractRequest, PdfOut, PdfRename
 from app.core.config import settings
 from app.core.security import require_access_token
 from app.core.utils import safe_path_under
 from app.db.models import PdfFile
 from app.db.session import get_db
 from app.services.pdf_service import delete_pdf_file, save_uploaded_pdf
+from app.services.text_extraction import extract_text_from_pdf
 
 router = APIRouter(prefix="/api/pdfs", tags=["pdfs"], dependencies=[Depends(require_access_token)])
 
@@ -99,12 +100,19 @@ def rename_pdf(pdf_id: str, payload: PdfRename, db: Session = Depends(get_db)):
     return pdf
 
 
-from app.api.schemas import PdfExtractRequest, PdfExtractOut
-from app.services.text_extraction import extract_text_from_pdf
-
 @router.post("/{pdf_id}/extract", response_model=PdfExtractOut)
 def extract_pdf_pages_text(pdf_id: str, payload: PdfExtractRequest, db: Session = Depends(get_db)):
     pdf = get_pdf_or_404(db, pdf_id)
-    # Extract text from the PDF file using our text extraction service
     text, _ = extract_text_from_pdf(pdf.file_path, payload.page_expression, pdf.page_count)
+    return {"text": text}
+
+
+@router.post("/{pdf_id}/extract-ai", response_model=PdfExtractOut)
+async def extract_pdf_pages_text_ai(pdf_id: str, payload: PdfExtractAiRequest, db: Session = Depends(get_db)):
+    from app.services.text_extraction import extract_text_from_pdf_via_ai
+
+    pdf = get_pdf_or_404(db, pdf_id)
+    text, _ = await extract_text_from_pdf_via_ai(
+        db, pdf.file_path, payload.page_expression, pdf.page_count, payload.prompt
+    )
     return {"text": text}

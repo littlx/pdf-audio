@@ -46,6 +46,14 @@ class PdfExtractRequest(BaseModel):
     page_expression: str = Field(min_length=1, max_length=128)
 
 
+class PdfExtractAiRequest(BaseModel):
+    page_expression: str = Field(min_length=1, max_length=128)
+    prompt: str = Field(
+        default="请严格按照人类从左到右、从上到下的正常阅读顺序进行线性文本提取，绝对不能把左右两栏的文字混淆。\n\n请自动剥离（删掉）每页顶部的页眉（Header）、底部的页脚（Footer）以及页码。\n\n如果遇到图片、图表或广告页，请直接跳过，不要提取它们，也不需要描述。\n\n请保留文章原本的标题和段落结构，用干净的 Markdown 格式输出。\n\n请原封不动地返回英文原文（不要翻译，不要总结，不要删减正文内容），以便我后续进行语音合成（TTS）听书。",
+        max_length=4000,
+    )
+
+
 class PdfExtractOut(BaseModel):
     text: str
 
