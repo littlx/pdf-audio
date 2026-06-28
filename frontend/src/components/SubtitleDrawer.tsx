@@ -127,44 +127,55 @@ export default function SubtitleDrawer() {
         </div>
 
         {/* Filters and Searches */}
-        <div className="p-3 border-b border-border flex flex-col gap-2">
-          <div className="search-input-wrapper">
-            <Search size={14} />
+        <div className="p-3 border-b border-border flex flex-col gap-2 bg-muted/20">
+          <div className="search-input-wrapper" style={{ height: '38px', borderRadius: '8px', padding: '0 12px', flex: 'none' }}>
+            <Search size={14} className="text-muted-foreground/60 shrink-0" />
             <input
               placeholder={t('searchTranscripts')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="h-9 text-xs pl-8 w-full"
             />
           </div>
-          <div className="flex items-center justify-between px-1">
-            <label className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground cursor-pointer uppercase">
-              <input
-                type="checkbox"
-                checked={hideEn}
-                onChange={(e) => setHideEn(e.target.checked)}
-                className="w-3.5 h-3.5 accent-ring"
-              />
-              <span>{t('hideEnglish')}</span>
-            </label>
-            <label className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground cursor-pointer uppercase">
-              <input
-                type="checkbox"
-                checked={hideZh}
-                onChange={(e) => setHideZh(e.target.checked)}
-                className="w-3.5 h-3.5 accent-ring"
-              />
-              <span>{t('hideChinese')}</span>
-            </label>
-            <label className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground cursor-pointer uppercase">
-              <input
-                type="checkbox"
-                checked={dictation}
-                onChange={(e) => setDictation(e.target.checked)}
-                className="w-3.5 h-3.5 accent-ring"
-              />
-              <span>{t('dictationMode')}</span>
-            </label>
+          
+          <div className="flex items-center gap-2 mt-1">
+            {/* Hide English Pill */}
+            <button
+              type="button"
+              onClick={() => setHideEn(!hideEn)}
+              className={`flex-1 py-1.5 px-2 rounded-full border text-[10px] font-bold tracking-wide uppercase transition-all cursor-pointer text-center ${
+                hideEn
+                  ? 'bg-destructive/10 text-destructive border-destructive/30 shadow-sm'
+                  : 'bg-muted/30 hover:bg-muted/50 border-border text-muted-foreground'
+              }`}
+            >
+              {t('hideEnglish') || '隐藏英文'}
+            </button>
+
+            {/* Hide Chinese Pill */}
+            <button
+              type="button"
+              onClick={() => setHideZh(!hideZh)}
+              className={`flex-1 py-1.5 px-2 rounded-full border text-[10px] font-bold tracking-wide uppercase transition-all cursor-pointer text-center ${
+                hideZh
+                  ? 'bg-destructive/10 text-destructive border-destructive/30 shadow-sm'
+                  : 'bg-muted/30 hover:bg-muted/50 border-border text-muted-foreground'
+              }`}
+            >
+              {t('hideChinese') || '隐藏中文'}
+            </button>
+
+            {/* Dictation Mode Pill */}
+            <button
+              type="button"
+              onClick={() => setDictation(!dictation)}
+              className={`flex-1 py-1.5 px-2 rounded-full border text-[10px] font-bold tracking-wide uppercase transition-all cursor-pointer text-center ${
+                dictation
+                  ? 'bg-primary/10 text-primary border-primary/30 shadow-sm'
+                  : 'bg-muted/30 hover:bg-muted/50 border-border text-muted-foreground'
+              }`}
+            >
+              {t('dictationMode') || '听写模式'}
+            </button>
           </div>
         </div>
 
