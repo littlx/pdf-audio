@@ -48,7 +48,7 @@ ssh -t "$SERVER_HOST" "
     git pull
     
     echo -e '\033[1;34m[SERVER]\033[0m Running deployment compilation & migrations...'
-    ./deploy.sh
+    bash deploy.sh
     
     echo -e '\033[1;34m[SERVER]\033[0m Restarting systemd backend and worker services...'
     sudo systemctl restart pdf-audio-backend pdf-audio-worker
