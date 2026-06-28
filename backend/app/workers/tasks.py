@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.utils import ensure_dir, new_id, utcnow
 from app.db.models import AudioFile, BilingualSegment, ConversionTask, PdfFile, TaskStage, STAGE_PROGRESS
 from app.db.session import SessionLocal
-from app.services.ai_service import generate_bilingual_segments
+from app.services.ai_service import generate_bilingual_segments, generate_bilingual_segments_auto
 from app.services.artifact_service import get_artifact, get_json_artifact, path_exists_artifact, set_artifact
 from app.services.settings_service import get_settings, tts_params
 from app.services.text_extraction import extract_text_from_pdf, parse_page_expression
@@ -109,6 +109,7 @@ def create_task(db: Session, payload: dict) -> ConversionTask:
         output_style=payload.get("output_style") or cfg["default_output_style"],
         audio_mode=payload.get("audio_mode") or "bilingual",
         ai_model=cfg.get("ai_model") or "deepseek-v4-flash",
+        extract_mode=payload.get("extract_mode") or "auto",
         status="pending",
         stage="pending",
         custom_title=payload.get("custom_title"),
@@ -153,7 +154,10 @@ async def _ensure_segments(db: Session, task: ConversionTask, text: str, control
         return existing
     control()
     update_task(db, task, "running", TaskStage.GENERATING_BILINGUAL_TEXT, STAGE_PROGRESS[TaskStage.GENERATING_BILINGUAL_TEXT])
-    data = await generate_bilingual_segments(db, text, task.bilingual_format, task.output_style)
+    if task.extract_mode == "auto":
+        data = await generate_bilingual_segments_auto(db, text, task.bilingual_format, task.output_style)
+    else:
+        data = await generate_bilingual_segments(db, text, task.bilingual_format, task.output_style)
     control()
     rows = []
     for idx, item in enumerate(data, start=1):

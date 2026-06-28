@@ -88,6 +88,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   const [customTitle, setCustomTitle] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [extractMode, setExtractMode] = useState<'local' | 'ai'>('local');
+  const [pipelineMode, setPipelineMode] = useState<'auto' | 'manual'>('auto');
   const notifiedTaskId = useRef<string | null>(null);
 
   const [isExtracting, setIsExtracting] = useState(false);
@@ -561,8 +562,8 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
 
     const payload = mode === 'text'
-      ? { pdf_id: pdf?.id, input_type: 'selected_text', selected_text: textToConvert, bilingual_format: format, output_style: style, audio_mode: audioMode, custom_title: customTitle.trim() || undefined }
-      : { pdf_id: pdf!.id, input_type: 'page_range', page_expression: pageExpression, bilingual_format: format, output_style: style, audio_mode: audioMode, custom_title: customTitle.trim() || undefined };
+      ? { pdf_id: pdf?.id, input_type: 'selected_text', selected_text: textToConvert, bilingual_format: format, output_style: style, audio_mode: audioMode, custom_title: customTitle.trim() || undefined, extract_mode: pipelineMode }
+      : { pdf_id: pdf!.id, input_type: 'page_range', page_expression: pageExpression, bilingual_format: format, output_style: style, audio_mode: audioMode, custom_title: customTitle.trim() || undefined, extract_mode: pipelineMode };
 
     try {
       const created = await api<Task>('/api/tasks', { method: 'POST', body: JSON.stringify(payload) });
@@ -694,6 +695,26 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     <div className="convert-pane">
       {/* ── Section 1: Config Header Bar ── */}
       <div className="convert-config-section">
+        {/* Pipeline Mode Toggle */}
+        <div className="convert-pipeline-toggle">
+          <button
+            type="button"
+            className={`convert-pipeline-btn ${pipelineMode === 'auto' ? 'is-active' : ''}`}
+            onClick={() => setPipelineMode('auto')}
+          >
+            <Sparkles size={12} />
+            <span>{t('extractModeAuto')}</span>
+          </button>
+          <button
+            type="button"
+            className={`convert-pipeline-btn ${pipelineMode === 'manual' ? 'is-active' : ''}`}
+            onClick={() => setPipelineMode('manual')}
+          >
+            <FileText size={12} />
+            <span>{t('extractModeManual')}</span>
+          </button>
+        </div>
+
         {/* Target + Mode row */}
         <div className="convert-config-row">
           {/* Target info */}
@@ -740,7 +761,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                 placeholder={t('pageExpressionPlaceholder')}
                 className="convert-input flex-1"
               />
-              {pdf && (
+              {pdf && pipelineMode === 'manual' && (
                 <div className="convert-extract-group">
                   <div className="convert-extract-mode">
                     <button
@@ -811,27 +832,29 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                     </span>
                   )}
                 </div>
-                <div className="convert-text-actions">
-                  {originalExtractedText && (
+                {pipelineMode === 'manual' && (
+                  <div className="convert-text-actions">
+                    {originalExtractedText && (
+                      <button
+                        type="button"
+                        onClick={handleRevertToOriginal}
+                        className="convert-text-action-btn"
+                        title={lang === 'zh' ? '恢复为初始 PDF 提取原文' : 'Revert to original extracted text'}
+                      >
+                        <RotateCcw size={11} />
+                        <span>{lang === 'zh' ? '恢复原文' : 'Revert'}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={handleRevertToOriginal}
-                      className="convert-text-action-btn"
-                      title={lang === 'zh' ? '恢复为初始 PDF 提取原文' : 'Revert to original extracted text'}
+                      onClick={() => setIsFullscreenEditorOpen(true)}
+                      className="convert-text-action-btn is-primary"
                     >
-                      <RotateCcw size={11} />
-                      <span>{lang === 'zh' ? '恢复原文' : 'Revert'}</span>
+                      <Maximize2 size={11} />
+                      <span>{lang === 'zh' ? '全屏编辑' : 'Fullscreen'}</span>
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setIsFullscreenEditorOpen(true)}
-                    className="convert-text-action-btn is-primary"
-                  >
-                    <Maximize2 size={11} />
-                    <span>{lang === 'zh' ? '全屏编辑' : 'Fullscreen'}</span>
-                  </button>
-                </div>
+                  </div>
+                )}
               </div>
 
               <textarea

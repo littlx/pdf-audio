@@ -67,6 +67,7 @@ class TaskCreate(BaseModel):
     output_style: Literal["faithful", "plain_explanation", "child_friendly", "exam_english", "business_english"] | None = None
     audio_mode: Literal["bilingual", "english", "chinese"] = "bilingual"
     custom_title: str | None = Field(default=None, min_length=1, max_length=256)
+    extract_mode: Literal["auto", "manual"] = "auto"
 
     @field_validator("page_expression", "selected_text", "custom_title")
     @classmethod
@@ -109,6 +110,7 @@ class TaskOut(BaseModel):
     output_style: str
     audio_mode: str
     custom_title: str | None = None
+    extract_mode: str = "auto"
     status: str
     stage: str
     progress: int

@@ -84,6 +84,7 @@ class ConversionTask(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     custom_title: Mapped[str] = mapped_column(String, nullable=True)
+    extract_mode: Mapped[str] = mapped_column(String, default="auto")
 
     pdf: Mapped[PdfFile] = relationship()
     segments: Mapped[list["BilingualSegment"]] = relationship(cascade="all, delete-orphan")

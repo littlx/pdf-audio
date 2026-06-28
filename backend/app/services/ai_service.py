@@ -44,6 +44,44 @@ PDF text:
 """
 
 
+def build_auto_prompt(text: str, bilingual_format: str, output_style: str) -> str:
+    """Combined prompt: first clean the raw PDF text, then produce bilingual segments.
+    Used when extract_mode == 'auto' so the AI does both jobs in one call."""
+    unit = "one English sentence and one Chinese sentence" if bilingual_format == "sentence_pair" else "one English paragraph and one Chinese paragraph"
+    return f"""You are a professional bilingual English learning material editor and PDF text extraction assistant.
+
+The text below was automatically extracted from a PDF document. First, clean up the raw text following these rules:
+
+- Follow the normal human reading order: left-to-right, top-to-bottom.
+- Do NOT mix text from different columns or layouts.
+- Remove page headers, footers, and page numbers from each page.
+- Skip images, charts, advertisement pages, and other non-content elements entirely.
+- Preserve the original title and paragraph structure.
+- Output clean Markdown format for the cleaned text.
+
+After cleaning, convert the cleaned English text into English-Chinese bilingual segments as a JSON array.
+
+Requirements for the bilingual output:
+- Output JSON only. Do not output Markdown or explanations.
+- Each JSON item must include: index, english, chinese.
+- Use {unit} per item.
+- Preserve the original information. Do not invent facts.
+- Preserve professional terminology.
+- When helpful, include bilingual terminology in Chinese, such as Transformer（转换器）.
+- Do not generate headings, summaries, introductions, or endings.
+- Skip references, formulas, tables, footnotes, and irrelevant artifacts.
+- Style: {STYLE_INSTRUCTIONS.get(output_style, STYLE_INSTRUCTIONS['faithful'])}
+
+JSON example:
+[
+  {{"index": 1, "english": "Artificial intelligence is changing how people learn.", "chinese": "人工智能正在改变人们的学习方式。"}}
+]
+
+Raw PDF text:
+{text}
+"""
+
+
 def _normalize_segments(data: list) -> list[dict[str, Any]]:
     normalized = []
     for item in data:
@@ -115,6 +153,17 @@ async def repair_json_with_ai(db: Session, bad_content: str) -> list[dict[str, A
 async def generate_bilingual_segments(db: Session, text: str, bilingual_format: str, output_style: str) -> list[dict[str, Any]]:
     prompt = build_prompt(text, bilingual_format, output_style)
     content = await _call_chat_completion(db, [{"role": "user", "content": prompt}], temperature=0.2, timeout=180)
+    try:
+        return extract_json_array(content)
+    except Exception:
+        return await repair_json_with_ai(db, content)
+
+
+async def generate_bilingual_segments_auto(db: Session, text: str, bilingual_format: str, output_style: str) -> list[dict[str, Any]]:
+    """Same as generate_bilingual_segments but uses build_auto_prompt()
+    which combines text cleaning and bilingual conversion in one AI call."""
+    prompt = build_auto_prompt(text, bilingual_format, output_style)
+    content = await _call_chat_completion(db, [{"role": "user", "content": prompt}], temperature=0.2, timeout=300)
     try:
         return extract_json_array(content)
     except Exception:
