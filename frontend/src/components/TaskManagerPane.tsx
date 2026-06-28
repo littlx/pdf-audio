@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { FileText, Pause, Play, RotateCcw, XCircle, RefreshCw, AlertCircle, Trash2, CheckCircle2, Circle, Eye, Volume2 } from 'lucide-react';
 import { api } from '../api/client';
 import type { AudioFile, Task } from '../api/types';
@@ -453,9 +454,9 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
       </div>
 
     {/* Task Details Modal */}
-    {isDetailOpen && detailTask && (
+    {isDetailOpen && detailTask && createPortal(
       <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-        <div className="w-full max-w-3xl bg-card rounded-lg border border-border shadow-2xl flex flex-col max-h-[85vh] overflow-hidden">
+        <div className="w-full max-w-[1080px] bg-card rounded-lg border border-border shadow-2xl flex flex-col max-h-[51vh] overflow-hidden">
           {/* Modal Header */}
           <div className="p-4 border-b border-border flex justify-between items-center bg-muted/40 shrink-0">
             <div className="flex flex-col gap-0.5">
@@ -514,25 +515,25 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
             </div>
 
             {/* Tabs Content */}
-            <div className="flex-1 flex flex-col gap-4 min-h-0">
+            <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0">
               {/* 1. Raw Text Box */}
-              <div className="flex flex-col gap-1 shrink-0">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+              <div className="flex flex-col gap-1.5 md:w-1/2 min-h-0">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0">
                   {lang === 'zh' ? '1. 提取的原始文本' : '1. Raw Extracted Text'}
                 </span>
                 {detailTask.extracted_text ? (
-                  <div className="max-h-36 overflow-y-auto text-xs font-sans p-3 bg-muted/20 rounded border border-border/80 whitespace-pre-wrap text-muted-foreground leading-relaxed">
+                  <div className="flex-1 overflow-y-auto text-xs font-sans p-3 bg-muted/20 rounded border border-border/80 whitespace-pre-wrap text-muted-foreground leading-relaxed md:max-h-none max-h-36 text-justify">
                     {detailTask.extracted_text}
                   </div>
                 ) : (
-                  <span className="text-xs text-muted-foreground italic p-2 bg-muted/10 rounded border border-border border-dashed">
+                  <span className="text-xs text-muted-foreground italic p-2 bg-muted/10 rounded border border-border border-dashed shrink-0">
                     {lang === 'zh' ? '暂无提取的原始文本（可能正处于提取队列中）' : 'No raw text extracted yet.'}
                   </span>
                 )}
               </div>
 
               {/* 2. Bilingual Segments & Audio Clips */}
-              <div className="flex-1 flex flex-col gap-1.5 min-h-0">
+              <div className="flex-1 flex flex-col gap-1.5 min-h-0 md:w-1/2">
                 <div className="flex justify-between items-center shrink-0">
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                     {lang === 'zh' ? '2. 双语对照句段与生成音频片段' : '2. Bilingual Segments & Audio Clips'}
@@ -551,54 +552,57 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
                       const hasChiClip = detailTask.completed_clips.includes(chiKey);
                       
                       return (
-                        <div key={seg.index} className="p-3 hover:bg-muted/10 flex flex-col gap-2 transition-colors">
-                          {/* Segment index indicator */}
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className="text-[9px] font-bold text-muted-foreground/60 font-mono bg-muted px-1 rounded">
+                        <div key={seg.index} className="p-3 hover:bg-muted/10 flex flex-row items-center gap-3 transition-colors">
+                          {/* Left side: Segment index indicator (vertically centered) */}
+                          <div className="w-8 shrink-0 text-center select-none font-mono">
+                            <span className="text-[10px] font-bold text-muted-foreground/60 bg-muted px-1.5 py-0.5 rounded">
                               #{seg.index}
                             </span>
                           </div>
 
-                          {/* English block */}
-                          <div className="flex justify-between items-start gap-4 group">
-                            <p className="text-[11px] leading-relaxed text-foreground m-0 flex-1 font-sans">
-                              {seg.english}
-                            </p>
-                            {hasEngClip && (
-                              <button
-                                type="button"
-                                onClick={() => playClip(detailTask.id, engKey)}
-                                className={`p-1 rounded cursor-pointer transition-all border shrink-0 ${
-                                  playingClip === engKey
-                                    ? 'bg-primary/20 text-primary border-primary/30 animate-pulse'
-                                    : 'bg-muted/50 hover:bg-primary/10 border-border hover:border-primary/20 text-muted-foreground hover:text-primary'
-                                }`}
-                                title={lang === 'zh' ? '播放英文片段' : 'Play English clip'}
-                              >
-                                <Volume2 size={11} className={playingClip === engKey ? 'scale-110' : ''} />
-                              </button>
-                            )}
-                          </div>
+                          {/* Right side: Bilingual text blocks & play buttons */}
+                          <div className="flex-1 min-w-0 flex flex-col gap-2">
+                            {/* English block */}
+                            <div className="flex justify-between items-start gap-4 group">
+                              <p className="text-[11px] leading-relaxed text-foreground m-0 flex-1 font-sans">
+                                {seg.english}
+                              </p>
+                              {hasEngClip && (
+                                <button
+                                  type="button"
+                                  onClick={() => playClip(detailTask.id, engKey)}
+                                  className={`p-1 rounded cursor-pointer transition-all border shrink-0 ${
+                                    playingClip === engKey
+                                      ? 'bg-primary/20 text-primary border-primary/30 animate-pulse'
+                                      : 'bg-muted/50 hover:bg-primary/10 border-border hover:border-primary/20 text-muted-foreground hover:text-primary'
+                                  }`}
+                                  title={lang === 'zh' ? '播放英文片段' : 'Play English clip'}
+                                >
+                                  <Volume2 size={11} className={playingClip === engKey ? 'scale-110' : ''} />
+                                </button>
+                              )}
+                            </div>
 
-                          {/* Chinese block */}
-                          <div className="flex justify-between items-start gap-4 group mt-1">
-                            <p className="text-[11px] leading-relaxed text-foreground m-0 flex-1 font-sans">
-                              {seg.chinese}
-                            </p>
-                            {hasChiClip && (
-                              <button
-                                type="button"
-                                onClick={() => playClip(detailTask.id, chiKey)}
-                                className={`p-1 rounded cursor-pointer transition-all border shrink-0 ${
-                                  playingClip === chiKey
-                                    ? 'bg-primary/20 text-primary border-primary/30 animate-pulse'
-                                    : 'bg-muted/50 hover:bg-primary/10 border-border hover:border-primary/20 text-muted-foreground hover:text-primary'
-                                }`}
-                                title={lang === 'zh' ? '播放中文片段' : 'Play Chinese clip'}
-                              >
-                                <Volume2 size={11} className={playingClip === chiKey ? 'scale-110' : ''} />
-                              </button>
-                            )}
+                            {/* Chinese block */}
+                            <div className="flex justify-between items-start gap-4 group">
+                              <p className="text-[11px] leading-relaxed text-foreground m-0 flex-1 font-sans">
+                                {seg.chinese}
+                              </p>
+                              {hasChiClip && (
+                                <button
+                                  type="button"
+                                  onClick={() => playClip(detailTask.id, chiKey)}
+                                  className={`p-1 rounded cursor-pointer transition-all border shrink-0 ${
+                                    playingClip === chiKey
+                                      ? 'bg-primary/20 text-primary border-primary/30 animate-pulse'
+                                      : 'bg-muted/50 hover:bg-primary/10 border-border hover:border-primary/20 text-muted-foreground hover:text-primary'
+                                  }`}
+                                  title={lang === 'zh' ? '播放中文片段' : 'Play Chinese clip'}
+                                >
+                                  <Volume2 size={11} className={playingClip === chiKey ? 'scale-110' : ''} />
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -616,7 +620,8 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
             </div>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     )}
     </div>
   );
