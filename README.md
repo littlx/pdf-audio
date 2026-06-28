@@ -98,6 +98,8 @@ Stop/logs:
 | `CORS_ORIGINS` | local dev origins | Comma-separated explicit origins. `*` is rejected outside development. |
 | `COOKIE_SECURE` | empty | Set to `true` or `false` to override cookie Secure attribute. Defaults to `true` outside development. |
 | `AUDIO_RETENTION_DAYS` | empty | Automatically clean up generated audios/tasks older than N days. 0 or empty disables auto-deletion (manual deletion only). |
+| `MAX_CONCURRENT_AI_REQUESTS` | `3` | Maximum number of concurrent AI translation API requests globally across all workers. |
+| `MAX_CONCURRENT_TTS_REQUESTS` | `5` | Maximum number of concurrent TTS audio synthesis requests globally across all workers. |
 
 ## Production hardening notes
 

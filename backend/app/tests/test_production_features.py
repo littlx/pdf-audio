@@ -309,3 +309,12 @@ def test_retention_policy_behavior(tmp_path: Path, monkeypatch):
 
     finally:
         db.close()
+
+
+@pytest.mark.anyio
+async def test_concurrency_limit_fallback():
+    from app.workers.tasks import concurrency_limit
+    # Test that concurrency_limit context manager yields and executes even if Redis is down/unset
+    async with concurrency_limit("test_limit", 2):
+        assert True
+

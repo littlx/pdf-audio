@@ -5,9 +5,11 @@ import shutil
 import threading
 import socket
 import os
+import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Callable
+from contextlib import asynccontextmanager
 
 from redis import Redis
 from rq import Queue
@@ -151,6 +153,50 @@ def _ensure_text(db: Session, task: ConversionTask, control: Callable[[], None])
     return text
 
 
+@asynccontextmanager
+async def concurrency_limit(name: str, max_leases: int, timeout_seconds: float = 1800.0):
+    """Distributed concurrency limiter using Redis. Falls back to no limit if Redis is unavailable."""
+    if not settings.redis_url:
+        yield
+        return
+        
+    try:
+        redis_conn = Redis.from_url(settings.redis_url)
+        redis_conn.ping()
+    except Exception:
+        yield
+        return
+
+    key = f"semaphore:{name}"
+    lease_id = f"lease:{new_id('lease')}"
+    
+    acquired = False
+    start_time = time.time()
+    try:
+        while time.time() - start_time < timeout_seconds:
+            now = time.time()
+            redis_conn.zremrangebyscore(key, 0, now)
+            active_count = redis_conn.zcard(key)
+            if active_count < max_leases:
+                expiry = now + 600
+                added = redis_conn.zadd(key, {lease_id: expiry})
+                if added > 0:
+                    acquired = True
+                    break
+            await asyncio.sleep(0.5)
+            
+        if not acquired:
+            raise TimeoutError(f"Concurrency limit timeout waiting for lease on {name}")
+            
+        yield
+    finally:
+        if acquired:
+            try:
+                redis_conn.zrem(key, lease_id)
+            except Exception:
+                pass
+
+
 async def _ensure_segments(db: Session, task: ConversionTask, text: str, control: Callable[[], None]) -> list[BilingualSegment]:
     existing = db.query(BilingualSegment).filter(BilingualSegment.task_id == task.id).order_by(BilingualSegment.segment_index).all()
     if existing:
@@ -158,9 +204,11 @@ async def _ensure_segments(db: Session, task: ConversionTask, text: str, control
     control()
     update_task(db, task, "running", TaskStage.GENERATING_BILINGUAL_TEXT, STAGE_PROGRESS[TaskStage.GENERATING_BILINGUAL_TEXT])
     if task.extract_mode == "auto":
-        data = await generate_bilingual_segments_auto(db, text, task.bilingual_format, task.output_style)
+        async with concurrency_limit("ai_api", settings.max_concurrent_ai):
+            data = await generate_bilingual_segments_auto(db, text, task.bilingual_format, task.output_style)
     else:
-        data = await generate_bilingual_segments(db, text, task.bilingual_format, task.output_style)
+        async with concurrency_limit("ai_api", settings.max_concurrent_ai):
+            data = await generate_bilingual_segments(db, text, task.bilingual_format, task.output_style)
     control()
     rows = []
     for idx, item in enumerate(data, start=1):
@@ -238,7 +286,8 @@ async def _ensure_clips(db: Session, task: ConversionTask, segments: list[Biling
             update_task(db, task, "running", TaskStage.GENERATING_TTS_CLIPS, STAGE_PROGRESS[TaskStage.GENERATING_TTS_CLIPS] + int(idx / total * 25))
             voice, rate, volume = tts_params(cfg, lang)
             path = tmp / f"{key}.mp3"
-            await synthesize(text, voice, path, rate=rate, volume=volume)
+            async with concurrency_limit("tts", settings.max_concurrent_tts):
+                await synthesize(text, voice, path, rate=rate, volume=volume)
             control()
             duration = ffprobe_duration(path)
             done[key] = {"key": key, "segment_index": segment_index, "lang": lang, "text": text, "path": str(path), "duration": duration}

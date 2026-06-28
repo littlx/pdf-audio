@@ -45,12 +45,9 @@ def enqueue_or_503(task_id: str) -> None:
 
 
 def ensure_active_capacity(db: Session) -> None:
-    active_tasks = db.query(ConversionTask).filter(ConversionTask.status.in_(list(ACTIVE_STATUSES))).count()
-    if active_tasks >= settings.max_active_tasks:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many concurrent running or pending tasks. Please wait for existing tasks to complete."
-        )
+    # Multiple tasks can proceed concurrently; total concurrency is governed at the worker level
+    # via AI API and TTS API rate limit semaphores.
+    pass
 
 
 def restore_task_state(db: Session, task: ConversionTask, snapshot: dict) -> None:

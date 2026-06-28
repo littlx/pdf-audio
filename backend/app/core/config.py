@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     cookie_secure: bool | None = Field(default=None, alias="COOKIE_SECURE")
     audio_retention_days: int | None = Field(default=None, alias="AUDIO_RETENTION_DAYS")
     tts_proxy: str | None = Field(default=None, alias="TTS_PROXY")
+    max_concurrent_ai: int = Field(default=3, alias="MAX_CONCURRENT_AI_REQUESTS")
+    max_concurrent_tts: int = Field(default=5, alias="MAX_CONCURRENT_TTS_REQUESTS")
 
     @property
     def is_cookie_secure(self) -> bool:
