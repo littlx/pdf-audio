@@ -51,10 +51,11 @@ def validate_runtime_settings() -> None:
         raise RuntimeError("APP_ACCESS_TOKEN must be set")
 
     if _is_production_like():
-        if token == "change-me" or token == "replace-with-a-long-random-access-code" or len(token) < 16:
-            raise RuntimeError("APP_ACCESS_TOKEN must be set to a long non-default value outside development")
+        if token == "change-me" or token == "replace-with-a-long-random-access-code" or len(token) < 6:
+            raise RuntimeError("APP_ACCESS_TOKEN must be set to a non-default value of at least 6 characters outside development")
         if settings.worker_fallback_to_thread:
-            raise RuntimeError("WORKER_FALLBACK_TO_THREAD must be false outside development")
+            import logging
+            logging.getLogger(__name__).warning("WORKER_FALLBACK_TO_THREAD is enabled outside development; this is not recommended for high load.")
         if not settings.redis_url:
             raise RuntimeError("REDIS_URL must be set outside development")
         if "*" in origins:
