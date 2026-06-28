@@ -26,7 +26,7 @@ function DashboardContent({
   onUnlock: () => void;
   onLogout: () => void;
 }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const {
     activeAudio,
     setActiveAudio,
@@ -37,8 +37,12 @@ function DashboardContent({
   const [leftTab, setLeftTab] = useState<'library' | 'media' | 'reader' | 'convert' | 'tasks'>('library');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [showIosGuide, setShowIosGuide] = useState(false);
   const [taskListVersion, setTaskListVersion] = useState(0);
   const [pdfJumpTrigger, setPdfJumpTrigger] = useState<{ page: number; ts: number } | undefined>(undefined);
+
+  const isIOS = typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+  const isStandalone = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone);
 
   const handleJumpToPdfPage = (page: number) => {
     setPdfJumpTrigger({ page, ts: Date.now() });
@@ -108,6 +112,12 @@ function DashboardContent({
               <span>{t('installApp') || '安装应用'}</span>
             </Button>
           )}
+          {isIOS && !isStandalone && (
+            <Button variant="ghost" size="sm" onClick={() => setShowIosGuide(true)} className="header-btn text-ring">
+              <Download size={14} />
+              <span>{t('installApp') || '安装应用'}</span>
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => setIsSettingsOpen(true)} className="header-btn">
             <Settings size={14} />
             <span>{t('settings')}</span>
@@ -166,7 +176,7 @@ function DashboardContent({
           </div>
 
           <div className={`pane-content ${leftTab === 'reader' ? 'no-scroll-layout' : ''}`}>
-            <div style={{ display: leftTab === 'library' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+            <div style={{ display: leftTab === 'library' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }} className="pane-fade-in">
               <LibraryPane
                 activePdfId={selectedPdf?.id}
                 onSelectPdf={setSelectedPdf}
@@ -178,15 +188,15 @@ function DashboardContent({
                 }}
               />
             </div>
-            <div style={{ display: leftTab === 'media' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+            <div style={{ display: leftTab === 'media' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }} className="pane-fade-in">
               <MediaPane />
             </div>
              {selectedPdf && (
-              <div style={{ display: leftTab === 'reader' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <div style={{ display: leftTab === 'reader' ? 'flex' : 'none', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }} className="pane-fade-in">
                 <PdfReaderPane key={selectedPdf.id} pdf={selectedPdf} jumpPageTrigger={pdfJumpTrigger} />
               </div>
             )}
-            <div style={{ display: leftTab === 'convert' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+            <div style={{ display: leftTab === 'convert' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }} className="pane-fade-in">
               <ConvertPane
                 key={selectedPdf?.id ?? 'no-pdf-mobile'}
                 pdf={selectedPdf}
@@ -195,7 +205,7 @@ function DashboardContent({
                 onJumpToPdfPage={handleJumpToPdfPage}
               />
             </div>
-            <div style={{ display: leftTab === 'tasks' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+            <div style={{ display: leftTab === 'tasks' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }} className="pane-fade-in">
               <TaskManagerPane refreshKey={taskListVersion} active={leftTab === 'tasks'} />
             </div>
           </div>
@@ -235,6 +245,67 @@ function DashboardContent({
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
       />
+
+      {/* iOS PWA Installation Guide Modal */}
+      {showIosGuide && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-background border border-border rounded-2xl max-w-md w-full p-6 shadow-2xl relative flex flex-col gap-4 animate-in fade-in zoom-in duration-200">
+            <h3 className="text-lg font-bold flex items-center gap-2">
+              <Download size={18} className="text-ring" />
+              {lang === 'zh' ? '安装到主屏幕' : 'Add to Home Screen'}
+            </h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {lang === 'zh' 
+                ? '在 iOS Safari 上，您可以将应用添加到主屏幕以获得原生的全屏体验和离线学习支持。' 
+                : 'On iOS Safari, you can install the app to your Home Screen for a native full-screen experience and offline support.'}
+            </p>
+            <div className="flex flex-col gap-3 my-2 text-xs">
+              <div className="flex items-start gap-3 bg-muted/40 p-3 rounded-lg border border-border/40">
+                <span className="flex items-center justify-center bg-ring/10 text-ring w-5 h-5 rounded-full font-mono text-[10px] shrink-0 font-bold">1</span>
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {lang === 'zh' ? '在 Safari 浏览器中点击“分享”按钮' : 'Tap the "Share" button in Safari'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                    {lang === 'zh' ? '通常位于屏幕底部，图标为：' : 'Usually at the bottom of the screen, icon looks like: '}
+                    <svg className="w-4 h-4 inline-block text-ring" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.684 10.742l1.506 3.012 3.012-1.506-1.506-3.012A3 3 0 118.684 10.742z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 2v12m0-12l-4 4m4-4l4 4" />
+                    </svg>
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 bg-muted/40 p-3 rounded-lg border border-border/40">
+                <span className="flex items-center justify-center bg-ring/10 text-ring w-5 h-5 rounded-full font-mono text-[10px] shrink-0 font-bold">2</span>
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {lang === 'zh' ? '在弹出的菜单中选择“添加到主屏幕”' : 'Select "Add to Home Screen" from the menu'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {lang === 'zh' ? '向下滑动找到带有“➕”图标的选项。' : 'Scroll down to find the option with the "➕" icon.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 bg-muted/40 p-3 rounded-lg border border-border/40">
+                <span className="flex items-center justify-center bg-ring/10 text-ring w-5 h-5 rounded-full font-mono text-[10px] shrink-0 font-bold">3</span>
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {lang === 'zh' ? '点击右上角的“添加”按钮确认' : 'Click the "Add" button in the top right'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {lang === 'zh' ? '应用图标将出现在您的 iPhone/iPad 桌面上。' : 'The app icon will then appear on your home screen.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-2">
+              <Button onClick={() => setShowIosGuide(false)} className="btn-primary-gradient w-full py-2 text-xs font-semibold">
+                {lang === 'zh' ? '我知道了' : 'Got it'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

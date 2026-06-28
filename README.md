@@ -96,6 +96,8 @@ Stop/logs:
 | `MAX_PDF_SIZE_MB` | `200` | Upload size limit. |
 | `MAX_PROCESS_PAGES` | `10` | Conversion page limit. |
 | `CORS_ORIGINS` | local dev origins | Comma-separated explicit origins. `*` is rejected outside development. |
+| `COOKIE_SECURE` | empty | Set to `true` or `false` to override cookie Secure attribute. Defaults to `true` outside development. |
+| `AUDIO_RETENTION_DAYS` | empty | Automatically clean up generated audios/tasks older than N days. 0 or empty disables auto-deletion (manual deletion only). |
 
 ## Production hardening notes
 
@@ -103,6 +105,9 @@ Stop/logs:
 - Keep Docker's default `127.0.0.1:8543:8543` binding and put HTTPS reverse proxy (Nginx/Caddy/etc.) in front of port `8543`.
 - Use explicit `CORS_ORIGINS`; wildcard CORS is rejected in production.
 - Set `SETTINGS_ENCRYPTION_KEY` before saving AI API keys in Settings.
+- **Login Rate Limiting & Cooldown**: Login endpoints feature a 1.5s delay on failures and block client IPs for 15 minutes after 5 consecutive failures to prevent brute force attacks.
+- **Session Tokens**: Authenticated sessions utilize cryptographically signed tokens containing a timestamp and HMAC-SHA256 signature, keeping the raw access code safe from XSS storage extraction.
+- **SSRF Prevention**: Outside development, requests to loopback addresses, local/private ranges, multicast, or cloud metadata endpoints (e.g., `169.254.169.254`) for AI Base URLs are strictly forbidden.
 - Docker image runs as a non-root user and uses `/app/storage` for persistent data.
 - Docker Compose waits for Redis health before starting `web`/`worker`.
 - If using the bind mount `./storage:/app/storage`, ensure the host directory is writable by the container user, or use a named volume.
@@ -128,6 +133,8 @@ WORKER_FALLBACK_TO_THREAD=false
 WORKER_MODE=fork
 CORS_ORIGINS=https://your-domain.example
 SETTINGS_ENCRYPTION_KEY=your-fernet-key
+COOKIE_SECURE=true
+AUDIO_RETENTION_DAYS=0
 AI_API_KEY=
 ```
 

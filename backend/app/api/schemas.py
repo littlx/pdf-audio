@@ -19,6 +19,11 @@ class LoginIn(BaseModel):
     token: str = Field(min_length=1, max_length=500)
 
 
+class LoginOut(BaseModel):
+    ok: bool = True
+    token: str
+
+
 class PdfOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -175,6 +180,7 @@ class SettingsOut(BaseModel):
     subtitle_font_size: str
     subtitle_color: str
     dark_mode: bool
+    audio_retention_days: int | None = None
 
 
 class VoiceOut(BaseModel):
@@ -219,11 +225,18 @@ class TtsPreviewRequest(BaseModel):
     text: str | None = Field(default=None, max_length=1_000)
 
 
+class AiTestRequest(BaseModel):
+    ai_base_url: str = Field(max_length=500)
+    ai_api_key: str | None = Field(default=None, max_length=500)
+    ai_model: str = Field(max_length=120)
+
+
 class PdfRename(BaseModel):
     original_name: str = Field(min_length=1, max_length=255)
 
 
 class AudioRename(BaseModel):
     title: str = Field(min_length=1, max_length=255)
+
 
 

@@ -22,8 +22,15 @@ class Settings(BaseSettings):
     running_task_stale_seconds: int = Field(default=7200, alias="RUNNING_TASK_STALE_SECONDS")
     ai_api_key: str | None = Field(default=None, alias="AI_API_KEY")
     settings_encryption_key: str | None = Field(default=None, alias="SETTINGS_ENCRYPTION_KEY")
-    cookie_secure: bool = Field(default=False, alias="COOKIE_SECURE")
+    cookie_secure: bool | None = Field(default=None, alias="COOKIE_SECURE")
+    audio_retention_days: int | None = Field(default=None, alias="AUDIO_RETENTION_DAYS")
     tts_proxy: str | None = Field(default=None, alias="TTS_PROXY")
+
+    @property
+    def is_cookie_secure(self) -> bool:
+        if self.cookie_secure is not None:
+            return self.cookie_secure
+        return self.app_env.lower() not in {"development", "dev", "local", "test"}
 
     model_config = SettingsConfigDict(env_file=(PROJECT_ROOT / ".env", BACKEND_ROOT / ".env"), extra="ignore")
 

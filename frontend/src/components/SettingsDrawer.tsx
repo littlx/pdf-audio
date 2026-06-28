@@ -25,6 +25,7 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
 
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [testingAi, setTestingAi] = useState(false);
   const [voices, setVoices] = useState<TtsVoice[]>([]);
   const [message, setMessage] = useState('');
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -33,10 +34,12 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
     if (isOpen) {
       setLocalSettings(settings);
       setApiKeyInput('');
+      setTestingAi(false);
       setMessage('');
       setError('');
     } else {
       setApiKeyInput('');
+      setTestingAi(false);
       setMessage('');
       if (previewAudioRef.current) {
         previewAudioRef.current.pause();
@@ -66,6 +69,28 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
       payload.ai_api_key = apiKeyInput.trim();
     }
     return payload;
+  }
+
+  async function testAiConnection() {
+    setError('');
+    setMessage('');
+    setTestingAi(true);
+    try {
+      await api('/api/settings/test-ai', {
+        method: 'POST',
+        body: JSON.stringify({
+          ai_base_url: localSettings.ai_base_url,
+          ai_api_key: apiKeyInput ? apiKeyInput : (localSettings.ai_api_key_configured ? '********' : ''),
+          ai_model: localSettings.ai_model,
+        }),
+      });
+      setMessage(t('aiConnectionSuccess') || 'AI connection test successful!');
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI connection test failed');
+    } finally {
+      setTestingAi(false);
+    }
   }
 
   async function save() {
@@ -179,6 +204,17 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
                   onChange={(e) => setSettingsField('ai_model', e.target.value)}
                   placeholder="deepseek-v4-flash"
                 />
+              </div>
+              <div className="mt-1">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="w-full"
+                  disabled={testingAi}
+                  onClick={testAiConnection}
+                >
+                  {testingAi ? t('loading') : t('testAiConnection')}
+                </Button>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div className="form-group">
@@ -349,6 +385,22 @@ export default function SettingsDrawer({ isOpen, onClose }: SettingsDrawerProps)
                 <Button variant="secondary" size="sm" className="w-full" onClick={handleClearCache}>
                   {t('clearCacheBtn')}
                 </Button>
+              </div>
+
+              <div className="mt-1 flex flex-col gap-1">
+                <label className="font-semibold text-xs text-muted-foreground uppercase tracking-wider block">
+                  {t('audioRetentionPolicy')}
+                </label>
+                <div className="text-xs text-foreground bg-muted/40 p-2.5 rounded-lg border border-border/40 font-medium">
+                  {localSettings.audio_retention_days && localSettings.audio_retention_days > 0 ? (
+                    <span>
+                      {localSettings.audio_retention_days}
+                      {t('audioRetentionDaysHint')}
+                    </span>
+                  ) : (
+                    <span>{t('audioRetentionNever')}</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, Maximize2, List } from 'lucide-react';
-import { api } from '../api/client';
+import { api, getToken } from '../api/client';
 import type { PdfFile } from '../api/types';
 import { Button } from './ui/button';
 import { useT } from '../context/I18nContext';
@@ -9,8 +10,8 @@ import { useT } from '../context/I18nContext';
 // Import Mozilla PDF.js standard styles for the text layer (enables text selection alignment)
 import 'pdfjs-dist/web/pdf_viewer.css';
 
-// Set standard PDF.js worker path to unpkg matching the installed pdfjs-dist version
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+// Set standard PDF.js worker path to the bundled local worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 type PdfReaderPaneProps = {
   pdf: PdfFile;
@@ -278,12 +279,19 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
     const loadPdfAndOutline = async () => {
       try {
         const fileUrl = `/api/pdfs/${pdf.id}/file`;
-        const response = await api<Response>(fileUrl);
-        const arrayBuffer = await response.arrayBuffer();
+        const token = getToken();
+        const httpHeaders: Record<string, string> = {};
+        if (token) {
+          httpHeaders['X-Access-Token'] = token;
+        }
 
         if (!isCurrent) return;
 
-        const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+        const loadingTask = pdfjsLib.getDocument({
+          url: fileUrl,
+          httpHeaders,
+          withCredentials: true,
+        });
         activeLoadingTask = loadingTask;
         const doc = await loadingTask.promise;
 

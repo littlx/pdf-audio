@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Calendar, FileText, Search, Trash2, UploadCloud, Wand2, Eye, Loader2, X, ArrowRight } from 'lucide-react';
-import { api } from '../api/client';
+import { api, getToken } from '../api/client';
 import type { PdfFile } from '../api/types';
 import { Button } from './ui/button';
 import { useT } from '../context/I18nContext';
@@ -25,6 +25,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
   const [searchQuery, setSearchQuery] = useState('');
   const [sort, setSort] = useState('uploaded_at');
   const [uploading, setUploading] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
@@ -47,20 +48,61 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
     setSearchQuery(keywordInput);
   };
 
-  async function upload(file: File) {
+  function upload(file: File) {
     setUploading(file.name);
+    setUploadProgress(0);
+    
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/pdfs', true);
+    const token = getToken();
+    if (token) {
+      xhr.setRequestHeader('X-Access-Token', token);
+    }
+    
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const percent = Math.round((e.loaded / e.total) * 100);
+        setUploadProgress(percent);
+      }
+    };
+    
+    xhr.onload = async () => {
+      setUploading('');
+      setUploadProgress(0);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const uploaded = JSON.parse(xhr.responseText) as PdfFile;
+          toast(`${t('uploadPdf')}: ${uploaded.original_name}.`, 'success');
+          await load();
+          onSelectPdf(uploaded);
+        } catch {
+          toast(t('renamePdfFailed') || 'Upload completed, but failed to parse response', 'error');
+        }
+      } else {
+        let errMsg = xhr.statusText;
+        try {
+          const responseJson = JSON.parse(xhr.responseText);
+          if (responseJson && responseJson.detail) {
+            if (Array.isArray(responseJson.detail)) {
+              errMsg = responseJson.detail.map((item: any) => item?.msg || 'Error').join('; ');
+            } else {
+              errMsg = String(responseJson.detail);
+            }
+          }
+        } catch {}
+        toast(errMsg || `Upload failed with status ${xhr.status}`, 'error');
+      }
+    };
+    
+    xhr.onerror = () => {
+      setUploading('');
+      setUploadProgress(0);
+      toast('Network error during upload', 'error');
+    };
+    
     const form = new FormData();
     form.append('file', file);
-    try {
-      const uploaded = await api<PdfFile>('/api/pdfs', { method: 'POST', body: form });
-      toast(`${t('uploadPdf')}: ${uploaded.original_name}.`, 'success');
-      await load();
-      onSelectPdf(uploaded);
-    } catch (err) {
-      toast(err instanceof Error ? err.message : t('renamePdfFailed'), 'error');
-    } finally {
-      setUploading('');
-    }
+    xhr.send(form);
   }
 
   async function remove(pdf: PdfFile, e: React.MouseEvent) {
@@ -129,13 +171,25 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
           hidden
           type="file"
           accept="application/pdf"
+          disabled={!!uploading}
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) upload(file);
           }}
         />
         {uploading ? (
-          <Loader2 size={24} className="text-ring animate-spin" />
+          <div className="flex flex-col items-center gap-2 w-full px-6">
+            <Loader2 size={24} className="text-ring animate-spin" />
+            <div className="w-full bg-secondary h-1.5 rounded-full overflow-hidden mt-1">
+              <div 
+                className="bg-ring h-1.5 rounded-full transition-all duration-300"
+                style={{ width: `${uploadProgress}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-muted-foreground font-mono">
+              {uploadProgress}%
+            </span>
+          </div>
         ) : (
           <UploadCloud size={24} className="text-muted-foreground" />
         )}

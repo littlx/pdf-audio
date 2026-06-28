@@ -1138,7 +1138,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
             <div className="convert-segments-body">
               {task.segments.map((segment) => (
                 <div key={segment.index} className="convert-segment-item">
-                  <span className="convert-segment-num">#{segment.index + 1}</span>
+                  <span className="convert-segment-num">#{segment.index}</span>
                   <p className="convert-segment-en">{segment.english}</p>
                   <p className="convert-segment-zh">{segment.chinese}</p>
                 </div>

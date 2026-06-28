@@ -68,6 +68,7 @@ export type AppSettings = {
   subtitle_font_size: 'small' | 'medium' | 'large';
   subtitle_color: string;
   dark_mode: boolean;
+  audio_retention_days?: number;
 };
 
 export type SettingsUpdatePayload = Partial<Omit<AppSettings, 'ai_api_key_configured' | 'ai_api_key_masked'>> & {

@@ -3,11 +3,12 @@ import shutil
 from pathlib import Path
 
 import edge_tts
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api.schemas import OkOut, SettingsOut, SettingsUpdate, TtsPreviewRequest, VoiceOut
+from app.api.schemas import OkOut, SettingsOut, SettingsUpdate, TtsPreviewRequest, VoiceOut, AiTestRequest
 from app.core.config import settings
 from app.core.security import require_access_token
 from app.core.utils import ensure_dir, safe_path_under
@@ -93,6 +94,56 @@ def clear_directory_safe(directory: Path, max_age_seconds: float = 7200):
                 shutil.rmtree(item, ignore_errors=True)
         except Exception:
             pass
+
+
+@router.post("/test-ai", response_model=OkOut)
+async def test_ai_connection(payload: AiTestRequest, db: Session = Depends(get_db)):
+    base_url = payload.ai_base_url.rstrip("/")
+    
+    from app.core.security import validate_url_ssrf
+    try:
+        validate_url_ssrf(base_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+        
+    api_key = payload.ai_api_key
+    
+    if not api_key or api_key == "********":
+        cfg = get_settings(db)
+        api_key = cfg.get("ai_api_key", "")
+        
+    if not api_key:
+        raise HTTPException(status_code=400, detail="AI API key is required but not configured.")
+        
+    model = payload.ai_model
+    
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(
+                f"{base_url}/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={
+                    "model": model,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "max_tokens": 5,
+                },
+            )
+            if response.status_code != 200:
+                detail = f"AI API returned HTTP {response.status_code}"
+                try:
+                    err_json = response.json()
+                    if "error" in err_json:
+                        detail += f": {err_json['error'].get('message', err_json['error'])}"
+                except Exception:
+                    pass
+                raise HTTPException(status_code=response.status_code, detail=detail)
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to connect to AI Base URL: {exc}"
+        ) from exc
+        
+    return {"ok": True}
 
 
 @router.post("/clear-cache", response_model=OkOut)

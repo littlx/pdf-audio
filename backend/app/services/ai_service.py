@@ -125,6 +125,10 @@ async def _call_chat_completion(db: Session, messages: list[dict[str, str]], tem
     cfg = get_settings(db)
     api_key = cfg.get("ai_api_key")
     base_url = str(cfg.get("ai_base_url") or "").rstrip("/")
+    
+    from app.core.security import validate_url_ssrf
+    validate_url_ssrf(base_url)
+    
     model = cfg.get("ai_model") or "deepseek-v4-flash"
     if not api_key:
         raise ValueError("AI API key is not configured")

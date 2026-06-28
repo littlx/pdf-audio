@@ -224,8 +224,8 @@ def resume_task(task_id: str, db: Session = Depends(get_db)):
 @router.post("/{task_id}/retry", response_model=TaskOut)
 def retry_task(task_id: str, db: Session = Depends(get_db)):
     task = get_task_or_404(db, task_id)
-    if task.status not in {"failed", "paused"}:
-        conflict("Only failed or paused tasks can be retried")
+    if task.status not in {"failed", "paused", "canceled"}:
+        conflict("Only failed, paused, or canceled tasks can be retried")
     with active_task_admission_lock():
         ensure_active_capacity(db)
         snapshot = {
@@ -297,19 +297,38 @@ async def task_events(task_id: str):
 @router.delete("/{task_id}", response_model=OkOut)
 def delete_task(task_id: str, db: Session = Depends(get_db)):
     task = get_task_or_404(db, task_id)
-    # If the task is active (pending, running, canceling), attempt to cancel its RQ job in Redis first
+    
     if task.status in ACTIVE_STATUSES:
-        try:
-            from rq.job import Job
-            redis_conn = Redis.from_url(settings.redis_url)
-            if task.rq_job_id:
-                try:
-                    job = Job.fetch(task.rq_job_id, connection=redis_conn)
-                    job.cancel()
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        if task.status == "pending":
+            try:
+                from rq.job import Job
+                redis_conn = Redis.from_url(settings.redis_url)
+                if task.rq_job_id:
+                    try:
+                        job = Job.fetch(task.rq_job_id, connection=redis_conn)
+                        job.cancel()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        else:
+            from app.workers.tasks import is_stale_running
+            if not is_stale_running(task):
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cannot delete an actively running task. Please cancel it first and wait for the worker to stop."
+                )
+            try:
+                from rq.job import Job
+                redis_conn = Redis.from_url(settings.redis_url)
+                if task.rq_job_id:
+                    try:
+                        job = Job.fetch(task.rq_job_id, connection=redis_conn)
+                        job.cancel()
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
     # Delete associated AudioFile if exists
     audio = db.query(AudioFile).filter(AudioFile.task_id == task_id).first()

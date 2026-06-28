@@ -8,12 +8,12 @@ export function getToken() {
 }
 
 export async function setToken(token: string) {
-  await api('/api/auth/login', {
+  const data = await api<{ ok: boolean; token: string }>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ token }),
     skipAuth: true,
   });
-  sessionStorage.setItem(TOKEN_KEY, token);
+  sessionStorage.setItem(TOKEN_KEY, data.token);
 }
 
 export async function clearToken() {

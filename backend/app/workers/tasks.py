@@ -92,7 +92,10 @@ def is_stale_running(task: ConversionTask) -> bool:
     heartbeat_at = task.heartbeat_at or task.updated_at or task.started_at
     if not heartbeat_at:
         return True
-    return utcnow() - heartbeat_at > timedelta(seconds=settings.running_task_stale_seconds)
+    from datetime import datetime, timezone
+    h_naive = heartbeat_at.replace(tzinfo=None) if heartbeat_at.tzinfo else heartbeat_at
+    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+    return now_naive - h_naive > timedelta(seconds=settings.running_task_stale_seconds)
 
 
 def create_task(db: Session, payload: dict) -> ConversionTask:

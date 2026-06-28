@@ -18,6 +18,7 @@ const defaultSettings: AppSettings = {
   subtitle_font_size: 'medium',
   subtitle_color: 'default',
   dark_mode: false,
+  audio_retention_days: undefined,
 };
 
 type SettingsContextType = {

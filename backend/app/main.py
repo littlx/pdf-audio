@@ -1,3 +1,4 @@
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 import logging
@@ -18,6 +19,7 @@ from app.api.schemas import HealthOut
 from app.core.config import settings, validate_runtime_settings
 from app.core.utils import ensure_dir
 from app.db.session import init_db
+from app.services.cleanup_service import run_periodic_cleanup
 
 
 @asynccontextmanager
@@ -29,7 +31,18 @@ async def lifespan(app: FastAPI):
     ensure_dir(Path(settings.storage_dir) / "tasks")
     ensure_dir(Path(settings.storage_dir) / "cache")
     init_db()
+    
+    stop_event = threading.Event()
+    cleanup_thread = threading.Thread(
+        target=run_periodic_cleanup,
+        args=(stop_event,),
+        daemon=True,
+    )
+    cleanup_thread.start()
+    
     yield
+    stop_event.set()
+
 
 
 app = FastAPI(title="Bilingual PDF Audio Player", lifespan=lifespan)
@@ -43,6 +56,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob:; "
+        "media-src 'self' blob:; "
+        "connect-src 'self' *; "
+        "worker-src 'self' blob:;"
+    )
+    response.headers["Content-Security-Policy"] = csp
+    return response
 
 
 @app.get("/api/health", response_model=HealthOut)

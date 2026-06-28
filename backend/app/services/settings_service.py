@@ -100,11 +100,16 @@ def tts_params(cfg: dict, lang: str) -> tuple[str, str, str]:
 
 
 def validate_ai_base_url(value: str) -> str:
-    parsed = urlparse(str(value or "").strip())
+    val = str(value or "").strip()
+    parsed = urlparse(val)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("AI Base URL must be an http(s) URL with a host")
     if parsed.query or parsed.fragment:
         raise ValueError("AI Base URL must not include query parameters or fragments")
+    
+    from app.core.security import validate_url_ssrf
+    validate_url_ssrf(val)
+    
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
 
 
@@ -130,6 +135,7 @@ def serialize_settings(values: dict) -> dict:
     data["ai_api_key_configured"] = bool(api_key)
     if api_key:
         data["ai_api_key_masked"] = "********"
+    data["audio_retention_days"] = settings.audio_retention_days
     return data
 
 
