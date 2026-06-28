@@ -1,7 +1,4 @@
-const TOKEN_KEY = 'sub_pdf_access_token';
-const OFFLINE_CACHE = 'sub-pdf-offline-audio-v1';
-const DRAFT_PREFIX = 'pdf_audio_draft_';
-const LAST_AUDIO_KEY = 'app-last-audio-id';
+import { DRAFT_PREFIX, LAST_AUDIO_KEY, OFFLINE_CACHE_NAME, TOKEN_KEY } from '../lib/storageKeys';
 
 export function getToken() {
   return sessionStorage.getItem(TOKEN_KEY) || '';
@@ -25,7 +22,7 @@ export async function clearToken() {
   }
 }
 
-function formatValidationError(detail: unknown) {
+export function formatValidationError(detail: unknown) {
   if (Array.isArray(detail)) {
     return detail.map((item: any) => {
       const loc = Array.isArray(item?.loc) ? item.loc.join('.') : 'field';
@@ -34,6 +31,15 @@ function formatValidationError(detail: unknown) {
   }
   if (typeof detail === 'string') return detail;
   return '';
+}
+
+export function parseApiErrorMessage(responseText: string, fallback = '') {
+  let message = fallback;
+  try {
+    const data = JSON.parse(responseText);
+    message = formatValidationError(data.detail) || data.detail || message;
+  } catch {}
+  return String(message || '');
 }
 
 type ApiRequestInit = RequestInit & { skipAuth?: boolean };
@@ -61,8 +67,8 @@ export async function api<T>(path: string, options: ApiRequestInit = {}): Promis
 }
 
 export async function clearOfflineCaches() {
-  if ('caches' in window) await caches.delete(OFFLINE_CACHE);
-  navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_OFFLINE_CACHE', cacheName: OFFLINE_CACHE });
+  if ('caches' in window) await caches.delete(OFFLINE_CACHE_NAME);
+  navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_OFFLINE_CACHE', cacheName: OFFLINE_CACHE_NAME });
 }
 
 export function clearLocalAppState() {

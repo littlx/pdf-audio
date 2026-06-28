@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp, Search, Loader2, Maximize2, Check, Sparkles, ChevronRight, Settings2, AlertCircle } from 'lucide-react';
-import { api } from '../api/client';
 import type { AppSettings, AudioFile, PdfFile, Task } from '../api/types';
+import { listAudios } from '../api/audios';
+import { extractPdfText } from '../api/pdfs';
+import { controlTask, createTask as createConversionTask, getTask, updateTaskText } from '../api/tasks';
+import { getSettings } from '../api/settings';
 import { Button } from './ui/button';
 import { useT } from '../context/I18nContext';
 import { useToast } from '../context/ToastContext';
 import { usePlayer } from '../context/PlayerContext';
-
-const defaultSettings = {
-  default_bilingual_format: 'sentence_pair',
-  default_output_style: 'faithful',
-} as const;
+import { defaultSettings } from '../lib/settingsOptions';
+import { canCancel, canPause, canResume, canRetry, getTaskStepIndex, getTaskTimelineSteps, mergeTask, type TaskControlAction } from '../lib/taskStatus';
+import { useDebouncedDraft } from '../hooks/useDebouncedDraft';
+import { useTaskTracking } from '../hooks/useTaskTracking';
 
 type InputMode = 'pages' | 'text';
 
@@ -22,53 +24,6 @@ type ConvertPaneProps = {
   onJumpToPdfPage?: (pageNum: number) => void;
 };
 
-function canPause(status: string) {
-  return ['pending', 'running'].includes(status);
-}
-function canCancel(status: string) {
-  return !['completed', 'failed', 'canceled'].includes(status);
-}
-function canResume(status: string) {
-  return status === 'paused';
-}
-function canRetry(status: string) {
-  return ['failed', 'paused', 'canceled'].includes(status);
-}
-
-function getStepIndex(stage: string): number {
-  switch (stage) {
-    case 'pending':
-    case 'extracting_text':
-    case 'text_ready':
-      return 0;
-    case 'generating_bilingual_text':
-    case 'bilingual_text_ready':
-      return 1;
-    case 'generating_tts_clips':
-    case 'clips_ready':
-      return 2;
-    case 'merging_audio':
-    case 'normalizing_audio':
-      return 3;
-    case 'generating_subtitles':
-      return 4;
-    case 'completed':
-      return 5;
-    default:
-      return 0;
-  }
-}
-
-const mergeTask = (prev: Task | null, incoming: Task): Task => {
-  if (!prev || prev.id !== incoming.id) return incoming;
-  return {
-    ...prev,
-    ...incoming,
-    segments: incoming.segments?.length ? incoming.segments : prev.segments,
-    extracted_text: incoming.extracted_text || prev.extracted_text,
-  };
-};
-
 export default function ConvertPane({ pdf, initialText = '', onConversionComplete, onTaskCreated, onJumpToPdfPage }: ConvertPaneProps) {
   const { t, lang } = useT();
   const { toast } = useToast();
@@ -78,7 +33,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   const [format, setFormat] = useState<AppSettings['default_bilingual_format']>(defaultSettings.default_bilingual_format);
   const [style, setStyle] = useState<AppSettings['default_output_style']>(defaultSettings.default_output_style);
   const [audioMode, setAudioMode] = useState('bilingual');
-  const [task, setTask] = useState<Task | null>(null);
+  const { task, setTask } = useTaskTracking(null);
   const [editableText, setEditableText] = useState(initialText);
   const [textToConvert, setTextToConvert] = useState(initialText);
   const [mode, setMode] = useState<InputMode>(initialText ? 'text' : 'pages');
@@ -97,19 +52,12 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     if (!pdf) return;
     setIsExtracting(true);
     try {
-      const res = await api<{ text: string }>(`/api/pdfs/${pdf.id}/extract`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page_expression: pageExpression }),
-      });
+      const res = await extractPdfText(pdf.id, pageExpression, 'local');
       setOriginalExtractedText(res.text);
       setTextToConvert(res.text);
       setEditableText(res.text);
       setMode('text');
-      if (pdf) {
-        localStorage.removeItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`);
-      }
-      setDraftStatus('idle');
+      clearDraft();
       toast(
         lang === 'zh'
           ? '文本提取成功，已为您切换到"文本"编辑模式。'
@@ -130,19 +78,12 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     if (!pdf) return;
     setIsExtracting(true);
     try {
-      const res = await api<{ text: string }>(`/api/pdfs/${pdf.id}/extract-ai`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ page_expression: pageExpression }),
-      });
+      const res = await extractPdfText(pdf.id, pageExpression, 'ai');
       setOriginalExtractedText(res.text);
       setTextToConvert(res.text);
       setEditableText(res.text);
       setMode('text');
-      if (pdf) {
-        localStorage.removeItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`);
-      }
-      setDraftStatus('idle');
+      clearDraft();
       toast(
         lang === 'zh'
           ? 'AI 文本提取成功，已为您切换到"文本"编辑模式。'
@@ -161,7 +102,16 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
 
   const [originalExtractedText, setOriginalExtractedText] = useState('');
   const [isFullscreenEditorOpen, setIsFullscreenEditorOpen] = useState(false);
-  const [draftStatus, setDraftStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const { draftStatus, setDraftStatus, clearDraft } = useDebouncedDraft(
+    pdf?.id,
+    pageExpression,
+    mode,
+    textToConvert,
+    setTextToConvert,
+    setEditableText,
+    originalExtractedText,
+    initialText
+  );
 
   // Reset PDF-scoped state when target PDF changes.
   useEffect(() => {
@@ -185,43 +135,12 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     setMode(nextText ? 'text' : 'pages');
   }, [pdf?.id]);
 
-  // Debounced Auto-save to localStorage
-  useEffect(() => {
-    if (mode === 'text' && pdf && textToConvert && textToConvert !== originalExtractedText) {
-      setDraftStatus('saving');
-      const timer = setTimeout(() => {
-        localStorage.setItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`, textToConvert);
-        setDraftStatus('saved');
-      }, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [textToConvert, mode, pdf, pageExpression, originalExtractedText]);
-
-  // Load draft from localStorage on document/page change
-  useEffect(() => {
-    if (mode !== 'text' || !pdf) return;
-    const savedDraft = localStorage.getItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`);
-    if (savedDraft) {
-      setTextToConvert(savedDraft);
-      setEditableText(savedDraft);
-      setDraftStatus('saved');
-      toast(
-        lang === 'zh' ? '已自动载入未保存的本地草稿。' : 'Auto-loaded uncommitted local draft.',
-        'success'
-      );
-    } else if (!initialText && !originalExtractedText) {
-      setDraftStatus('idle');
-    }
-  }, [pdf?.id, pageExpression, mode]);
 
   const handleRevertToOriginal = () => {
     if (originalExtractedText) {
       setTextToConvert(originalExtractedText);
       setEditableText(originalExtractedText);
-      if (pdf) {
-        localStorage.removeItem(`pdf_audio_draft_${pdf.id}_${pageExpression}`);
-      }
-      setDraftStatus('idle');
+      clearDraft();
       toast(
         lang === 'zh' ? '已恢复至初始解析的原文并清空草稿。' : 'Reverted to original text and cleared draft.',
         'success'
@@ -496,21 +415,9 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
   };
 
-  const steps = lang === 'zh' ? [
-    { label: '提取 PDF 文本', desc: '从 PDF 或选区中解析原始内容' },
-    { label: 'AI 双语对齐与翻译', desc: '利用大模型生成精准中英对照' },
-    { label: '分句语音合成', desc: '生成高品质双语朗读音频切片' },
-    { label: '音频合成与正规化', desc: '拼接音频并优化电平与降噪' },
-    { label: '生成同步双语字幕', desc: '生成与音频同步的播放器字幕' },
-  ] : [
-    { label: 'Extract PDF Text', desc: 'Parsing original content from PDF' },
-    { label: 'AI Bilingual Translation', desc: 'Generating translation and alignment' },
-    { label: 'Sentence Voice Synthesis', desc: 'Generating read-aloud audio clips' },
-    { label: 'Audio Merging & Normalizing', desc: 'Merging audio and optimizing volume' },
-    { label: 'Generate Synced Subtitles', desc: 'Rendering synced player subtitles' },
-  ];
+  const steps = getTaskTimelineSteps(lang);
 
-  const stepIndex = task ? getStepIndex(task.stage || 'pending') : 0;
+  const stepIndex = task ? getTaskStepIndex(task.stage || 'pending') : 0;
 
   // Sync initialText if it changes from parent
   useEffect(() => {
@@ -524,7 +431,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
 
   // Load defaults from AppSettings
   useEffect(() => {
-    api<AppSettings>('/api/settings')
+    getSettings()
       .then((settings) => {
         setFormat(settings.default_bilingual_format || defaultSettings.default_bilingual_format);
         setStyle(settings.default_output_style || defaultSettings.default_output_style);
@@ -536,7 +443,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     if (currentTask.status !== 'completed') return;
     if (notifiedTaskId.current === currentTask.id) return;
     try {
-      const list = await api<AudioFile[]>('/api/audios');
+      const list = await listAudios();
       const audio = list.find((item) => item.task_id === currentTask.id) || null;
       if (audio) {
         notifiedTaskId.current = currentTask.id;
@@ -566,7 +473,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
       : { pdf_id: pdf!.id, input_type: 'page_range', page_expression: pageExpression, bilingual_format: format, output_style: style, audio_mode: audioMode, custom_title: customTitle.trim() || undefined, extract_mode: pipelineMode };
 
     try {
-      const created = await api<Task>('/api/tasks', { method: 'POST', body: JSON.stringify(payload) });
+      const created = await createConversionTask(payload);
       setTask(created);
       onTaskCreated?.(created);
     } catch (err) {
@@ -585,75 +492,12 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
   }, [task]);
 
-  // SSE and Polling fallback for task tracking
-  useEffect(() => {
-    if (!task) return;
 
-    // If the task is already in a terminal state, don't start listening or polling
-    if (['completed', 'failed', 'canceled'].includes(task.status)) {
-      return;
-    }
-
-    let timer: any = null;
-    let isCleanedUp = false;
-    const source = new EventSource(`/api/tasks/${task.id}/events`);
-
-    const startPolling = () => {
-      if (timer || isCleanedUp) return;
-      timer = setInterval(async () => {
-        try {
-          const data = await api<Task>(`/api/tasks/${task.id}`);
-          if (isCleanedUp) return;
-
-          setTask(prev => {
-            const merged = mergeTask(prev, data);
-            // If the task reached a terminal state, stop polling
-            if (['completed', 'failed', 'canceled'].includes(merged.status)) {
-              clearInterval(timer);
-              timer = null;
-            }
-            return merged;
-          });
-        } catch (err) {
-          console.error('Task polling failed:', err);
-        }
-      }, 3000);
-    };
-
-    source.onmessage = (event) => {
-      if (isCleanedUp) return;
-      if (timer) {
-        clearInterval(timer);
-        timer = null;
-      }
-      const data = JSON.parse(event.data);
-      setTask(prev => {
-        const merged = mergeTask(prev, data);
-        // If the task reached a terminal state, close the event source
-        if (['completed', 'failed', 'canceled'].includes(merged.status)) {
-          source.close();
-        }
-        return merged;
-      });
-    };
-
-    source.onerror = () => {
-      if (isCleanedUp) return;
-      source.close();
-      startPolling();
-    };
-
-    return () => {
-      isCleanedUp = true;
-      source.close();
-      if (timer) clearInterval(timer);
-    };
-  }, [task?.id]);
 
   async function refresh() {
     if (!task) return;
     try {
-      const data = await api<Task>(`/api/tasks/${task.id}`);
+      const data = await getTask(task.id);
       setTask(prev => mergeTask(prev, data));
     } catch (err) {
       console.error('Refresh task failed:', err);
@@ -663,8 +507,8 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   async function saveText() {
     if (!task) return;
     try {
-      await api(`/api/tasks/${task.id}/text`, { method: 'PATCH', body: JSON.stringify({ text: editableText }) });
-      const retried = await api<Task>(`/api/tasks/${task.id}/retry`, { method: 'POST' });
+      await updateTaskText(task.id, editableText);
+      const retried = await controlTask(task.id, 'retry');
       notifiedTaskId.current = null;
       setTask(prev => mergeTask(prev, retried));
       await refresh();
@@ -674,14 +518,14 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
     }
   }
 
-  async function control(action: 'pause' | 'cancel' | 'resume' | 'retry') {
+  async function control(action: TaskControlAction) {
     if (!task) return;
     setError('');
     if (action === 'retry') {
       notifiedTaskId.current = null;
     }
     try {
-      const updated = await api<Task>(`/api/tasks/${task.id}/${action}`, { method: 'POST' });
+      const updated = await controlTask(task.id, action);
       setTask(prev => mergeTask(prev, updated));
       await refresh();
     } catch (err) {

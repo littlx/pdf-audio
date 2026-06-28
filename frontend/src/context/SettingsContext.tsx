@@ -1,25 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { api } from '../api/client';
 import type { AppSettings, SettingsUpdatePayload } from '../api/types';
-
-const defaultSettings: AppSettings = {
-  ai_base_url: '',
-  ai_model: '',
-  default_bilingual_format: 'sentence_pair',
-  default_output_style: 'faithful',
-  english_voice: 'en-US-JennyNeural',
-  chinese_voice: 'zh-CN-XiaoxiaoNeural',
-  english_rate: '+0%',
-  chinese_rate: '+0%',
-  english_volume: '+0%',
-  chinese_volume: '+0%',
-  pause_between_languages_ms: 500,
-  pause_between_segments_ms: 800,
-  subtitle_font_size: 'medium',
-  subtitle_color: 'default',
-  dark_mode: false,
-  audio_retention_days: undefined,
-};
+import { clearSettingsCache, getSettings, updateSettings as saveSettings } from '../api/settings';
+import { defaultSettings } from '../lib/settingsOptions';
+import { THEME_DARK_KEY } from '../lib/storageKeys';
 
 type SettingsContextType = {
   settings: AppSettings;
@@ -39,7 +22,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; unlocked: b
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [isDark, setIsDark] = useState(() => {
     try {
-      return localStorage.getItem('theme_dark') === 'true';
+      return localStorage.getItem(THEME_DARK_KEY) === 'true';
     } catch {
       return false;
     }
@@ -50,7 +33,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; unlocked: b
   const loadSettings = async (): Promise<AppSettings> => {
     setLoading(true);
     try {
-      const data = await api<AppSettings>('/api/settings');
+      const data = await getSettings();
       const loaded = { ...defaultSettings, ...data };
       setSettings(loaded);
       setIsDark(Boolean(loaded.dark_mode));
@@ -75,19 +58,16 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; unlocked: b
     const root = document.documentElement;
     if (isDark) {
       root.classList.add('dark');
-      localStorage.setItem('theme_dark', 'true');
+      localStorage.setItem(THEME_DARK_KEY, 'true');
     } else {
       root.classList.remove('dark');
-      localStorage.setItem('theme_dark', 'false');
+      localStorage.setItem(THEME_DARK_KEY, 'false');
     }
   }, [isDark]);
 
   const updateSettings = async (payload: SettingsUpdatePayload): Promise<AppSettings> => {
     try {
-      const saved = await api<AppSettings>('/api/settings', {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
+      const saved = await saveSettings(payload);
       const updated = { ...defaultSettings, ...saved };
       setSettings(updated);
       setIsDark(Boolean(updated.dark_mode));
@@ -101,7 +81,7 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode; unlocked: b
 
   const clearServerCache = async () => {
     try {
-      await api('/api/settings/clear-cache', { method: 'POST' });
+      await clearSettingsCache();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to clear cache';
       setError(msg);

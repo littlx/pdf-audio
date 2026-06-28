@@ -1,11 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Calendar, FileText, Search, Trash2, UploadCloud, Wand2, Eye, Loader2, X, ArrowRight } from 'lucide-react';
-import { api, getToken } from '../api/client';
+import { Calendar, FileText, Trash2, UploadCloud, Wand2, Eye, Loader2 } from 'lucide-react';
+import { deletePdf, listPdfs, renamePdf, uploadPdf } from '../api/pdfs';
 import type { PdfFile } from '../api/types';
 import { Button } from './ui/button';
 import { useT } from '../context/I18nContext';
 import { useToast } from '../context/ToastContext';
 import EditableTitle from './EditableTitle';
+import SearchInput from './shared/SearchInput';
+import EmptyState from './shared/EmptyState';
 
 function shortTitle(name: string) {
   return name.replace(/\.pdf$/i, '').trim();
@@ -31,7 +33,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api<PdfFile[]>(`/api/pdfs?keyword=${encodeURIComponent(searchQuery)}&sort=${sort}`);
+      const data = await listPdfs(searchQuery, sort);
       setPdfs(data);
     } catch (err) {
       toast(err instanceof Error ? err.message : t('deletePdfFailed'), 'error');
@@ -48,61 +50,20 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
     setSearchQuery(keywordInput);
   };
 
-  function upload(file: File) {
+  async function upload(file: File) {
     setUploading(file.name);
     setUploadProgress(0);
-    
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/api/pdfs', true);
-    const token = getToken();
-    if (token) {
-      xhr.setRequestHeader('X-Access-Token', token);
+    try {
+      const uploaded = await uploadPdf(file, setUploadProgress);
+      toast(`${t('uploadPdf')}: ${uploaded.original_name}.`, 'success');
+      await load();
+      onSelectPdf(uploaded);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Network error during upload', 'error');
+    } finally {
+      setUploading('');
+      setUploadProgress(0);
     }
-    
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        const percent = Math.round((e.loaded / e.total) * 100);
-        setUploadProgress(percent);
-      }
-    };
-    
-    xhr.onload = async () => {
-      setUploading('');
-      setUploadProgress(0);
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          const uploaded = JSON.parse(xhr.responseText) as PdfFile;
-          toast(`${t('uploadPdf')}: ${uploaded.original_name}.`, 'success');
-          await load();
-          onSelectPdf(uploaded);
-        } catch {
-          toast(t('renamePdfFailed') || 'Upload completed, but failed to parse response', 'error');
-        }
-      } else {
-        let errMsg = xhr.statusText;
-        try {
-          const responseJson = JSON.parse(xhr.responseText);
-          if (responseJson && responseJson.detail) {
-            if (Array.isArray(responseJson.detail)) {
-              errMsg = responseJson.detail.map((item: any) => item?.msg || 'Error').join('; ');
-            } else {
-              errMsg = String(responseJson.detail);
-            }
-          }
-        } catch {}
-        toast(errMsg || `Upload failed with status ${xhr.status}`, 'error');
-      }
-    };
-    
-    xhr.onerror = () => {
-      setUploading('');
-      setUploadProgress(0);
-      toast('Network error during upload', 'error');
-    };
-    
-    const form = new FormData();
-    form.append('file', file);
-    xhr.send(form);
   }
 
   async function remove(pdf: PdfFile, e: React.MouseEvent) {
@@ -110,7 +71,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
     const ok = await confirm(t('deleteConfirmPdf'));
     if (!ok) return;
     try {
-      await api(`/api/pdfs/${pdf.id}`, { method: 'DELETE' });
+      await deletePdf(pdf.id);
       toast(t('pdfDeletedSuccess'), 'success');
       await load();
     } catch (err) {
@@ -122,34 +83,16 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
     <div className="flex flex-col gap-4 h-full">
       {/* Filters Toolbar */}
       <div className="library-filters">
-        <div className="search-input-wrapper">
-          <Search size={14} className="text-muted-foreground" />
-          <input
-            placeholder={t('searchInLibrary')}
-            value={keywordInput}
-            onChange={(e) => setKeywordInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSearchSubmit()}
-          />
-          {keywordInput && (
-            <button
-              onClick={() => {
-                setKeywordInput('');
-                setSearchQuery('');
-              }}
-              className="search-clear-btn"
-              title={t('clear') || '清空'}
-            >
-              <X size={12} />
-            </button>
-          )}
-          <button
-            onClick={handleSearchSubmit}
-            className="search-submit-btn"
-            title={t('search') || '搜索'}
-          >
-            <ArrowRight size={13} />
-          </button>
-        </div>
+        <SearchInput
+          placeholder={t('searchInLibrary')}
+          value={keywordInput}
+          onChange={setKeywordInput}
+          onClear={() => {
+            setKeywordInput('');
+            setSearchQuery('');
+          }}
+          onSubmit={handleSearchSubmit}
+        />
         <select value={sort} onChange={(e) => setSort(e.target.value)}>
           <option value="uploaded_at">{t('uploadDate')}</option>
           <option value="file_size">{t('fileSize')}</option>
@@ -231,10 +174,7 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
                         onSave={async (newTitle) => {
                           const newName = newTitle + '.pdf';
                           if (newName === pdf.original_name) return;
-                          await api<PdfFile>(`/api/pdfs/${pdf.id}/rename`, {
-                            method: 'PATCH',
-                            body: JSON.stringify({ original_name: newName }),
-                          });
+                          await renamePdf(pdf.id, newName);
                           toast(t('renameSuccess'), 'success');
                           await load();
                         }}
@@ -287,10 +227,10 @@ export default function LibraryPane({ onSelectPdf, onOpenConvert, activePdfId }:
           )}
 
           {!loading && pdfs.length === 0 && (
-            <div className="empty-state p-8 text-center text-muted-foreground">
-              <FileText size={32} className="mx-auto opacity-40 mb-2" />
-              <h3 className="font-bold text-sm">{t('noPdfFound')}</h3>
-            </div>
+            <EmptyState
+              icon={<FileText size={32} />}
+              title={t('noPdfFound')}
+            />
           )}
         </div>
       </div>

@@ -1,77 +1,16 @@
-import { useEffect, useRef, useState, memo, useMemo } from 'react';
-import { Copy, Search, X } from 'lucide-react';
-import type { SubtitleEntry } from '../api/types';
+import { useEffect, useRef, useState, useMemo } from 'react';
+import { X } from 'lucide-react';
 import { Button } from './ui/button';
 import { useT } from '../context/I18nContext';
 import { usePlayer } from '../context/PlayerContext';
-
-function groupSubtitles(entries: SubtitleEntry[]) {
-  const groups = new Map<number, { english?: SubtitleEntry; chinese?: SubtitleEntry }>();
-  entries.forEach((entry) => {
-    const group = groups.get(entry.segment_index) || {};
-    if (entry.lang === 'english') group.english = entry;
-    if (entry.lang === 'chinese') group.chinese = entry;
-    groups.set(entry.segment_index, group);
-  });
-  return Array.from(groups.entries()).map(([index, value]) => ({ index, ...value }));
-}
-
-type SubtitleSegmentRowProps = {
-  group: { index: number; english?: SubtitleEntry; chinese?: SubtitleEntry };
-  isActive: boolean;
-  hideEn: boolean;
-  hideZh: boolean;
-  setSeekTime: (time: number) => void;
-  activeRef: React.RefObject<HTMLDivElement | null> | null;
-  copyTooltip: string;
-};
-
-const SubtitleSegmentRow = memo(({
-  group,
-  isActive,
-  hideEn,
-  hideZh,
-  setSeekTime,
-  activeRef,
-  copyTooltip,
-}: SubtitleSegmentRowProps) => {
-  return (
-    <div
-      ref={activeRef}
-      className={`subtitle-segment-row ${isActive ? 'is-active' : ''}`}
-      onClick={() => {
-        const entry = group.english || group.chinese;
-        if (entry) setSeekTime(entry.start);
-      }}
-    >
-      <span className="segment-num">
-        {String(group.index + 1).padStart(2, '0')}
-      </span>
-      <div className="subtitle-texts">
-        {!hideEn && <p className="en-text">{group.english?.text}</p>}
-        {!hideZh && <p className="zh-text">{group.chinese?.text}</p>}
-      </div>
-      <Button
-        variant="ghost"
-        size="iconSm"
-        onClick={(e) => {
-          e.stopPropagation();
-          navigator.clipboard.writeText(
-            `${group.english?.text || ''}\n${group.chinese?.text || ''}`
-          );
-        }}
-        title={copyTooltip}
-      >
-        <Copy size={12} className="text-muted-foreground" />
-      </Button>
-    </div>
-  );
-});
-
-SubtitleSegmentRow.displayName = 'SubtitleSegmentRow';
+import { useToast } from '../context/ToastContext';
+import { filterSubtitleGroups, groupSubtitles } from '../lib/subtitles';
+import SearchInput from './shared/SearchInput';
+import SubtitleSegmentList from './subtitles/SubtitleSegmentList';
 
 export default function SubtitleDrawer() {
   const { t } = useT();
+  const { toast } = useToast();
   const {
     isSubtitlesOpen,
     setIsSubtitlesOpen,
@@ -91,15 +30,17 @@ export default function SubtitleDrawer() {
 
   // Group subtitles
   const groups = useMemo(() => {
-    return groupSubtitles(subs).filter((g) => {
-      if (!query) return true;
-      const q = query.toLowerCase();
-      return (
-        (g.english?.text || '').toLowerCase().includes(q) ||
-        (g.chinese?.text || '').toLowerCase().includes(q)
-      );
-    });
+    return filterSubtitleGroups(groupSubtitles(subs), query);
   }, [subs, query]);
+
+  const listItems = useMemo(() => {
+    return groups.map((g) => ({
+      index: g.index,
+      english: g.english?.text,
+      chinese: g.chinese?.text,
+      start: g.english?.start ?? g.chinese?.start ?? 0,
+    }));
+  }, [groups]);
 
   // Scroll active segment into view in the drawer
   useEffect(() => {
@@ -128,14 +69,12 @@ export default function SubtitleDrawer() {
 
         {/* Filters and Searches */}
         <div className="p-3 border-b border-border flex flex-col gap-2 bg-muted/20">
-          <div className="search-input-wrapper" style={{ height: '38px', borderRadius: '8px', padding: '0 12px', flex: 'none' }}>
-            <Search size={14} className="text-muted-foreground/60 shrink-0" />
-            <input
-              placeholder={t('searchTranscripts')}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
+          <SearchInput
+            placeholder={t('searchTranscripts')}
+            value={query}
+            onChange={setQuery}
+            style={{ height: '38px', borderRadius: '8px', padding: '0 12px', flex: 'none' }}
+          />
           
           <div className="flex items-center gap-2 mt-1">
             {/* Hide English Pill */}
@@ -181,24 +120,17 @@ export default function SubtitleDrawer() {
 
         {/* Segments list */}
         <div className="subtitle-drawer-content">
-          {groups.map((group) => {
-            const isActive = activeSub?.segment_index === group.index;
-            return (
-              <SubtitleSegmentRow
-                key={group.index}
-                group={group}
-                isActive={isActive}
-                hideEn={hideEn}
-                hideZh={hideZh}
-                setSeekTime={setSeekTime}
-                activeRef={isActive ? activeItemRef : null}
-                copyTooltip={t('copyText')}
-              />
-            );
-          })}
-          {groups.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-8">{t('noMatchingSubtitles')}</p>
-          )}
+          <SubtitleSegmentList
+            items={listItems}
+            activeIndex={activeSub?.segment_index}
+            hideEn={hideEn}
+            hideZh={hideZh}
+            onPlay={setSeekTime}
+            activeRef={activeItemRef}
+            copyTooltip={t('copyText')}
+            toast={toast}
+            emptyText={t('noMatchingSubtitles')}
+          />
         </div>
 
         <div className="subtitle-drawer-footer">

@@ -1,31 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Download, FileDown, Headphones, Repeat2, SkipBack, SkipForward, Wifi, ListMusic, MoreVertical, Play, Pause } from 'lucide-react';
-import { api, getToken } from '../api/client';
-import type { SubtitleEntry } from '../api/types';
+import { getPlayback, getSubtitlesByUrl, savePlayback } from '../api/audios';
+import { getToken } from '../api/client';
+import { findSubtitleIndexAtTime } from '../lib/subtitles';
+import { OFFLINE_CACHE_NAME } from '../lib/storageKeys';
 import { Button } from './ui/button';
 import { useT } from '../context/I18nContext';
 import { usePlayer } from '../context/PlayerContext';
 import { useToast } from '../context/ToastContext';
 import { formatTime } from '../lib/utils';
-
-function binarySearchSubtitles(subs: SubtitleEntry[], time: number): number {
-  let low = 0;
-  let high = subs.length - 1;
-  while (low <= high) {
-    const mid = (low + high) >> 1;
-    const item = subs[mid];
-    if (time >= item.start && time <= item.end) {
-      return mid;
-    } else if (time < item.start) {
-      high = mid - 1;
-    } else {
-      low = mid + 1;
-    }
-  }
-  return -1;
-}
-
-
 
 export default function GlobalPlayer() {
   const { t } = useT();
@@ -60,6 +43,7 @@ export default function GlobalPlayer() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const autoPlayTriggered = useRef<string | null>(null);
   const activeAudioIdRef = useRef<string | null>(null);
+  const isFirstLoad = useRef(true);
 
   useEffect(() => {
     activeAudioIdRef.current = activeAudio?.id ?? null;
@@ -143,7 +127,7 @@ export default function GlobalPlayer() {
     setDuration(0);
     
     // Fetch subtitles JSON
-    api<SubtitleEntry[]>(activeAudio.subtitle_json_url)
+    getSubtitlesByUrl(activeAudio.subtitle_json_url)
       .then((data) => {
         if (!canceled && activeAudioIdRef.current === audioId) {
           setSubs(data);
@@ -156,7 +140,7 @@ export default function GlobalPlayer() {
       });
 
     // Fetch playback state
-    api<any>(`/api/audios/${audioId}/playback`)
+    getPlayback(audioId)
       .then((record) => {
         if (canceled || activeAudioIdRef.current !== audioId) return;
         if (audioRef.current) {
@@ -176,7 +160,12 @@ export default function GlobalPlayer() {
     }
 
     // Reset auto play trigger lock
-    autoPlayTriggered.current = null;
+    if (isFirstLoad.current) {
+      autoPlayTriggered.current = audioId;
+      isFirstLoad.current = false;
+    } else {
+      autoPlayTriggered.current = null;
+    }
 
     return () => {
       canceled = true;
@@ -216,7 +205,7 @@ export default function GlobalPlayer() {
     const now = audio.currentTime;
     
     // Find active subtitle line using Binary Search
-    const subIdx = binarySearchSubtitles(subs, now);
+    const subIdx = findSubtitleIndexAtTime(subs, now);
     const entry = subIdx !== -1 ? subs[subIdx] : null;
     setActiveSub(entry);
 
@@ -248,20 +237,17 @@ export default function GlobalPlayer() {
     const current_time = audioRef.current.currentTime;
     const playback_rate = audioRef.current.playbackRate;
     const loop_current_segment = loop;
-    await api(`/api/audios/${audioId}/playback`, {
-      method: 'PUT',
-      body: JSON.stringify({
-        current_time,
-        playback_rate,
-        loop_current_segment,
-      }),
+    await savePlayback(audioId, {
+      current_time,
+      playback_rate,
+      loop_current_segment,
     }).catch(() => undefined);
   }
 
   async function saveOffline() {
     if (!activeAudio || !('caches' in window)) return;
     try {
-      const cache = await caches.open('sub-pdf-offline-audio-v1');
+      const cache = await caches.open(OFFLINE_CACHE_NAME);
       const headers = { 'X-Access-Token': getToken() };
       await cache.add(new Request(activeAudio.audio_url, { headers }));
       await cache.add(new Request(activeAudio.subtitle_json_url, { headers }));

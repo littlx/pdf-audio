@@ -1,44 +1,18 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { FileText, Pause, Play, RotateCcw, XCircle, RefreshCw, AlertCircle, Trash2, CheckCircle2, Circle, Eye, Volume2 } from 'lucide-react';
-import { api } from '../api/client';
+import { getTask, controlTask, deleteTask as apiDeleteTask } from '../api/tasks';
 import type { AudioFile, Task } from '../api/types';
 import { Button } from './ui/button';
 import { useT } from '../context/I18nContext';
-import { usePlayer } from '../context/PlayerContext';
 import { useToast } from '../context/ToastContext';
-
-// Helper to determine step name/milestone in Chinese or English
-function getStageLabel(stage: string, lang: string): string {
-  switch (stage) {
-    case 'pending':
-      return lang === 'zh' ? '排队中' : 'Queueing';
-    case 'extracting_text':
-      return lang === 'zh' ? '提取文本' : 'Extracting text';
-    case 'text_ready':
-      return lang === 'zh' ? '文本就绪' : 'Text ready';
-    case 'generating_bilingual_text':
-      return lang === 'zh' ? 'AI 翻译对齐' : 'Translating';
-    case 'bilingual_text_ready':
-      return lang === 'zh' ? '双语就绪' : 'Bilingual ready';
-    case 'generating_tts_clips':
-      return lang === 'zh' ? '分句朗读合成' : 'TTS synthesis';
-    case 'clips_ready':
-      return lang === 'zh' ? '分句音频就绪' : 'Audio clips ready';
-    case 'merging_audio':
-      return lang === 'zh' ? '拼接音频' : 'Merging audio';
-    case 'normalizing_audio':
-      return lang === 'zh' ? '音质优化' : 'Normalizing audio';
-    case 'generating_subtitles':
-      return lang === 'zh' ? '生成双语字幕' : 'Generating subtitles';
-    case 'completed':
-      return lang === 'zh' ? '已完成' : 'Completed';
-    case 'canceled':
-      return lang === 'zh' ? '已取消' : 'Canceled';
-    default:
-      return stage;
-  }
-}
+import { useTaskList } from '../hooks/useTaskList';
+import { useActiveAudioControls } from '../hooks/useActiveAudioControls';
+import { useEphemeralAudio } from '../hooks/useEphemeralAudio';
+import { getStageLabel } from '../lib/taskStatus';
+import Alert from './shared/Alert';
+import EmptyState from './shared/EmptyState';
+import ProgressBar from './shared/ProgressBar';
 
 type TaskManagerPaneProps = {
   refreshKey?: number;
@@ -48,23 +22,20 @@ type TaskManagerPaneProps = {
 export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskManagerPaneProps) {
   const { t, lang } = useT();
   const { toast, confirm } = useToast();
-  const { activeAudio, setActiveAudio, isPlaying, togglePlay } = usePlayer();
+  
+  const { tasks, audios, loading, error, load } = useTaskList(refreshKey, active);
+  const { isAudioActive, isAudioPlaying, playOrToggle } = useActiveAudioControls();
+  const { playingKey: playingClip, play: playEphemeral, stop: stopEphemeral } = useEphemeralAudio();
 
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [audios, setAudios] = useState<AudioFile[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [detailTask, setDetailTask] = useState<any | null>(null);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
-  const [playingClip, setPlayingClip] = useState<string | null>(null);
-  const clipAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load task details dynamically
   const loadTaskDetail = async (taskId: string) => {
     setIsLoadingDetail(true);
     try {
-      const data = await api<any>(`/api/tasks/${taskId}`);
+      const data = await getTask<any>(taskId);
       setDetailTask(data);
       setIsDetailOpen(true);
     } catch (err) {
@@ -76,92 +47,15 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
 
   // Play inline audio clip
   const playClip = (taskId: string, clipKey: string) => {
-    if (clipAudioRef.current) {
-      clipAudioRef.current.pause();
-    }
-    
-    if (playingClip === clipKey) {
-      setPlayingClip(null);
-      return;
-    }
-    
-    // The browser will send the auth cookie automatically
     const audioUrl = `/api/tasks/${taskId}/clips/${clipKey}`;
-    const audio = new Audio(audioUrl);
-    clipAudioRef.current = audio;
-    setPlayingClip(clipKey);
-    
-    audio.play().catch((err) => {
-      console.error('Failed to play clip:', err);
+    playEphemeral(clipKey, audioUrl, () => {
       toast(lang === 'zh' ? '音频文件加载失败或正在生成' : 'Failed to load clip audio', 'error');
-      setPlayingClip(null);
     });
-    
-    audio.onended = () => {
-      setPlayingClip(null);
-    };
   };
-
-  // Stop audio on unmount or close
-  useEffect(() => {
-    return () => {
-      if (clipAudioRef.current) {
-        clipAudioRef.current.pause();
-      }
-    };
-  }, []);
-  // Keep a ref of tasks to check if we should keep polling
-  const tasksRef = useRef<Task[]>([]);
-  tasksRef.current = tasks;
-
-  const load = useCallback(async (showLoading = false) => {
-    if (showLoading) setLoading(true);
-    setError('');
-    try {
-      const [tasksData, audiosData] = await Promise.all([
-        api<Task[]>('/api/tasks?limit=50'),
-        api<AudioFile[]>('/api/audios')
-      ]);
-      setTasks(tasksData);
-      setAudios(audiosData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '加载任务列表失败');
-    } finally {
-      if (showLoading) setLoading(false);
-    }
-  }, []);
-
-  // Poll tasks if any are running/pending
-  useEffect(() => {
-    load(true);
-  }, [load]);
-
-  useEffect(() => {
-    if (refreshKey > 0) {
-      load(false);
-    }
-  }, [refreshKey, load]);
-
-  useEffect(() => {
-    if (active) {
-      load(true);
-    }
-  }, [active, load]);
-
-  useEffect(() => {
-    const hasActiveTasks = tasks.some(t => ['pending', 'running', 'canceling'].includes(t.status));
-    if (!hasActiveTasks) return;
-
-    const timer = setInterval(() => {
-      load(false);
-    }, 4000);
-
-    return () => clearInterval(timer);
-  }, [tasks, load]);
 
   async function control(task: Task, action: 'pause' | 'cancel' | 'resume' | 'retry') {
     try {
-      await api(`/api/tasks/${task.id}/${action}`, { method: 'POST' });
+      await controlTask(task.id, action);
       toast(t('controlSuccess') || '操作成功', 'success');
       await load(false);
     } catch (err) {
@@ -182,7 +76,7 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
     const ok = await confirm(confirmMsg);
     if (!ok) return;
     try {
-      await api(`/api/tasks/${task.id}`, { method: 'DELETE' });
+      await apiDeleteTask(task.id);
       toast(t('deleteSuccess') || '删除成功', 'success');
       await load(false);
     } catch (err) {
@@ -203,12 +97,7 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      {error && (
-        <div className="p-3 bg-destructive/15 text-destructive text-xs font-bold rounded-lg flex items-center gap-2 animate-scaleUp">
-          <AlertCircle size={14} />
-          <span>{error}</span>
-        </div>
-      )}
+      {error && <Alert message={error} className="animate-scaleUp" />}
 
       {/* Stats Bar Overview Header */}
       {!loading && tasks.length > 0 && (
@@ -261,8 +150,8 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
           ) : (
             tasks.map((task) => {
               const audio = getTaskAudio(task.id);
-              const isAudioActive = audio && activeAudio?.id === audio.id;
-              const isAudioPlaying = isAudioActive && isPlaying;
+              const isCurrentActive = !!(audio && isAudioActive(audio.id));
+              const isCurrentPlaying = !!(audio && isAudioPlaying(audio.id));
 
               // Format styling mode representation
               let styleLabel = '';
@@ -310,14 +199,7 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
                   <div className="task-dash-console">
                     {/* Progress Bar (Full width of the console area) */}
                     {['running', 'pending', 'paused', 'canceling'].includes(task.status) && (
-                      <div className="progress-bar-container h-1 rounded-full overflow-hidden bg-secondary w-full">
-                        <div 
-                          className={`progress-bar-fill h-full transition-all duration-500 rounded-full ${
-                            task.status === 'paused' ? 'bg-amber-500' : 'bg-ring'
-                          }`} 
-                          style={{ width: `${task.progress}%` }} 
-                        />
-                      </div>
+                      <ProgressBar progress={task.progress} status={task.status} />
                     )}
 
                     {/* Status & Buttons (Same Row) */}
@@ -406,23 +288,17 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
                         {/* Play Action */}
                         {task.status === 'completed' && audio && (
                           <Button
-                            variant={isAudioActive ? 'default' : 'secondary'}
+                            variant={isCurrentActive ? 'default' : 'secondary'}
                             size="sm"
                             className="flex items-center gap-1 text-[10px] h-7 px-2"
-                            onClick={() => {
-                              if (isAudioActive) {
-                                togglePlay();
-                              } else {
-                                setActiveAudio(audio);
-                              }
-                            }}
+                            onClick={() => playOrToggle(audio)}
                           >
-                            {isAudioPlaying ? (
+                            {isCurrentPlaying ? (
                               <Pause size={10} fill="currentColor" />
                             ) : (
                               <Play size={10} fill="currentColor" />
                             )}
-                            <span className="hidden sm:inline">{isAudioPlaying ? t('pause') : t('play')}</span>
+                            <span className="hidden sm:inline">{isCurrentPlaying ? t('pause') : t('play')}</span>
                           </Button>
                         )}
 
@@ -441,14 +317,16 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
           )}
 
           {!loading && tasks.length === 0 && (
-            <div className="empty-state p-8 text-center text-muted-foreground">
-              <FileText size={32} className="mx-auto opacity-40 mb-2" />
-              <h3 className="font-bold text-sm">暂无任务记录</h3>
-              <p className="text-xs mb-3">所有的 PDF 和文本转换任务都将在此处展示。</p>
-              <Button variant="secondary" size="sm" onClick={() => load(true)}>
-                <RefreshCw size={13} /> {t('refreshStatus') || '刷新'}
-              </Button>
-            </div>
+            <EmptyState
+              icon={<FileText size={32} />}
+              title="暂无任务记录"
+              description="所有的 PDF 和文本转换任务都将在此处展示。"
+              action={
+                <Button variant="secondary" size="sm" onClick={() => load(true)}>
+                  <RefreshCw size={13} /> {t('refreshStatus') || '刷新'}
+                </Button>
+              }
+            />
           )}
         </div>
       </div>
@@ -472,8 +350,7 @@ export default function TaskManagerPane({ refreshKey = 0, active = true }: TaskM
               size="sm"
               onClick={() => {
                 setIsDetailOpen(false);
-                if (clipAudioRef.current) clipAudioRef.current.pause();
-                setPlayingClip(null);
+                stopEphemeral();
               }}
               className="w-7 h-7 p-0 shrink-0"
             >

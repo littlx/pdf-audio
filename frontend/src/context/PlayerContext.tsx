@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { AudioFile, SubtitleEntry } from '../api/types';
-import { api } from '../api/client';
+import { listAudios } from '../api/audios';
+import { LAST_AUDIO_KEY } from '../lib/storageKeys';
 
 type PlayerContextType = {
   activeAudio: AudioFile | null;
@@ -46,17 +47,17 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode; unlocked: boo
       setSubs([]);
       setIsSubtitlesOpen(false);
       setSeekTime(null);
-      localStorage.removeItem('app-last-audio-id');
+      localStorage.removeItem(LAST_AUDIO_KEY);
       return;
     }
 
     let canceled = false;
     const restoreLastAudio = async () => {
       try {
-        const list = await api<AudioFile[]>('/api/audios');
+        const list = await listAudios();
         if (canceled) return;
         if (list && list.length > 0) {
-          const lastId = localStorage.getItem('app-last-audio-id');
+          const lastId = localStorage.getItem(LAST_AUDIO_KEY);
           const lastAudio = list.find((a) => a.id === lastId) || list[0];
           setActiveAudioState(lastAudio);
         }
@@ -73,9 +74,9 @@ export const PlayerProvider: React.FC<{ children: React.ReactNode; unlocked: boo
   const setActiveAudio = (audio: AudioFile | null) => {
     setActiveAudioState(audio);
     if (audio) {
-      localStorage.setItem('app-last-audio-id', audio.id);
+      localStorage.setItem(LAST_AUDIO_KEY, audio.id);
     } else {
-      localStorage.removeItem('app-last-audio-id');
+      localStorage.removeItem(LAST_AUDIO_KEY);
     }
   };
 
