@@ -8,14 +8,12 @@ export function useTaskTracking(initialTask: Task | null) {
 
   useEffect(() => {
     setTask(initialTask);
-  }, [initialTask?.id]);
+  }, [initialTask?.id, initialTask?.status]);
+
+  const isTerminal = task ? isTerminalTaskStatus(task.status) : true;
 
   useEffect(() => {
-    if (!task) return;
-
-    if (isTerminalTaskStatus(task.status)) {
-      return;
-    }
+    if (!task || isTerminal) return;
 
     let timer: any = null;
     let isCleanedUp = false;
@@ -69,7 +67,7 @@ export function useTaskTracking(initialTask: Task | null) {
       source.close();
       if (timer) clearInterval(timer);
     };
-  }, [task?.id]);
+  }, [task?.id, isTerminal]);
 
   return {
     task,

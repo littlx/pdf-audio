@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp, Search, Loader2, Maximize2, Check, Sparkles, ChevronRight, Settings2, AlertCircle } from 'lucide-react';
+import { Play, Pause, RefreshCw, XCircle, RotateCcw, FileText, CheckCircle2, ChevronDown, ChevronUp, Search, Loader2, Maximize2, Check, Sparkles, ChevronRight, Settings2, AlertCircle, MapPin } from 'lucide-react';
 import type { AppSettings, AudioFile, PdfFile, Task } from '../api/types';
 import { listAudios } from '../api/audios';
 import { extractPdfText } from '../api/pdfs';
@@ -598,13 +598,31 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         <div className="convert-input-area">
           {mode === 'pages' ? (
             <div className="convert-pages-row">
-              <input
-                id="pages-input"
-                value={pageExpression}
-                onChange={(e) => setPageExpression(e.target.value)}
-                placeholder={t('pageExpressionPlaceholder')}
-                className="convert-input flex-1"
-              />
+              <div className="convert-pages-input-row">
+                <input
+                  id="pages-input"
+                  value={pageExpression}
+                  onChange={(e) => setPageExpression(e.target.value)}
+                  placeholder={t('pageExpressionPlaceholder')}
+                  className="convert-input flex-1"
+                />
+                {pdf && onJumpToPdfPage && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const match = pageExpression.match(/\d+/);
+                      if (match) {
+                        const pNum = parseInt(match[0], 10);
+                        onJumpToPdfPage(pNum);
+                      }
+                    }}
+                    className="convert-link-btn"
+                  >
+                    <MapPin size={13} />
+                    <span>{lang === 'zh' ? '定位' : 'Locate'}</span>
+                  </button>
+                )}
+              </div>
               {pdf && pipelineMode === 'manual' && (
                 <div className="convert-extract-group">
                   <div className="convert-extract-mode">
@@ -642,22 +660,6 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
                     )}
                   </button>
                 </div>
-              )}
-              {pdf && onJumpToPdfPage && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const match = pageExpression.match(/\d+/);
-                    if (match) {
-                      const pNum = parseInt(match[0], 10);
-                      onJumpToPdfPage(pNum);
-                    }
-                  }}
-                  className="convert-link-btn"
-                >
-                  <FileText size={13} />
-                  <span>{t('locatePage')}</span>
-                </button>
               )}
             </div>
           ) : (

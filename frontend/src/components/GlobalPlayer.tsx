@@ -56,6 +56,21 @@ export default function GlobalPlayer() {
     }
   }
 
+  // Cleanup audio resources on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+        try {
+          audioRef.current.load();
+        } catch (e) {
+          // ignore
+        }
+      }
+    };
+  }, []);
+
   // Sync displayedText with active subtitle line
   useEffect(() => {
     if (!activeAudio) {
@@ -73,6 +88,8 @@ export default function GlobalPlayer() {
       } else {
         setDisplayedText(activeSub.text);
       }
+    } else {
+      setDisplayedText('');
     }
   }, [activeSub, dictation, hideEn, hideZh, activeAudio?.id]);
 
@@ -207,7 +224,9 @@ export default function GlobalPlayer() {
     // Find active subtitle line using Binary Search
     const subIdx = findSubtitleIndexAtTime(subs, now);
     const entry = subIdx !== -1 ? subs[subIdx] : null;
-    setActiveSub(entry);
+    if (entry !== activeSub) {
+      setActiveSub(entry);
+    }
 
     // Subtitle segment updates are processed via activeSub state
 
@@ -303,9 +322,13 @@ export default function GlobalPlayer() {
             {displayedText ? (
               <span className="text-foreground font-bold">{displayedText}</span>
             ) : (
-              <span className="text-xs text-muted-foreground italic font-normal">
-                {t('pressPlayFollow')}
-              </span>
+              currentTime === 0 && !isPlaying ? (
+                <span className="text-xs text-muted-foreground italic font-normal">
+                  {t('pressPlayFollow')}
+                </span>
+              ) : (
+                <span className="text-foreground font-bold">&nbsp;</span>
+              )
             )}
           </>
         )}

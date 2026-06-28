@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useLayoutEffect } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Loader2, Maximize2, List } from 'lucide-react';
@@ -41,11 +41,13 @@ function PdfPageItem({
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
-
   const [aspectRatio, setAspectRatio] = useState(0.707); // Default A4 ratio
   const [shouldRender, setShouldRender] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
   const [pageLoading, setPageLoading] = useState(false);
+
+  const shouldRenderRef = useRef(shouldRender);
+  shouldRenderRef.current = shouldRender;
 
   // Fetch page dimensions to set the correct container aspect-ratio placeholder (prevents layout shifting)
   useEffect(() => {
@@ -126,20 +128,32 @@ function PdfPageItem({
         const viewport = page.getViewport({ scale: renderScale });
         const dpr = window.devicePixelRatio || 1;
 
-        // Configure canvas sizing
-        canvas.width = viewport.width * dpr;
-        canvas.height = viewport.height * dpr;
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
+        // Create an off-screen temporary canvas for double buffering (prevents white flashing during rendering)
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = viewport.width * dpr;
+        tempCanvas.height = viewport.height * dpr;
+        const tempContext = tempCanvas.getContext('2d');
+        if (!tempContext) return;
+        tempContext.scale(dpr, dpr);
 
-        context.scale(dpr, dpr);
-
-        // Render PDF page vector contents onto Canvas
+        // Render PDF page vector contents onto off-screen Canvas
         renderTask = page.render({
-          canvasContext: context,
+          canvasContext: tempContext,
           viewport,
         });
         await renderTask.promise;
+
+        if (!active) return;
+
+        // Draw off-screen canvas onto active canvas in a single frame to prevent flashing
+        canvas.width = tempCanvas.width;
+        canvas.height = tempCanvas.height;
+        canvas.style.width = `${viewport.width}px`;
+        canvas.style.height = `${viewport.height}px`;
+        const activeContext = canvas.getContext('2d');
+        if (activeContext) {
+          activeContext.drawImage(tempCanvas, 0, 0);
+        }
 
         if (!active) return;
 
@@ -182,8 +196,8 @@ function PdfPageItem({
       if (textLayerInstance) {
         textLayerInstance.cancel();
       }
-      // Explicitly set width/height to 0 on canvas to deallocate graphics memory buffer immediately
-      if (canvasRef.current) {
+      // Only clear canvas buffer to 0 if the page is actually scrolling out of view (shouldRender becomes false)
+      if (!shouldRenderRef.current && canvasRef.current) {
         canvasRef.current.width = 0;
         canvasRef.current.height = 0;
       }
@@ -206,22 +220,20 @@ function PdfPageItem({
         width: `${displayWidth}px`,
         height: `${displayHeight}px`,
       }}
-      className="relative flex items-center justify-center bg-card shadow-md rounded border border-border/30 overflow-hidden my-4 shrink-0 transition-shadow duration-200 hover:shadow-lg"
+      className="pdf-page-item relative flex items-center justify-center bg-card shadow-md rounded border border-border/30 overflow-hidden my-4 shrink-0 hover:shadow-lg"
     >
-      {shouldRender && (
-        <div className="absolute inset-0 w-full h-full">
-          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-contain" />
-          {/* Transparent selectable text layer aligned perfectly over the canvas */}
-          <div
-            ref={textLayerRef}
-            className="textLayer absolute inset-0 z-10 pointer-events-auto select-text select-all"
-          />
-        </div>
-      )}
+      <div className="absolute inset-0 w-full h-full">
+        <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-contain" />
+        {/* Transparent selectable text layer aligned perfectly over the canvas */}
+        <div
+          ref={textLayerRef}
+          className="textLayer absolute inset-0 z-10 pointer-events-auto select-text select-all"
+        />
+      </div>
 
       {/* Loading state indicator */}
       {(!isRendered || pageLoading) && (
-        <div className="absolute inset-0 flex items-center justify-center bg-card/60 backdrop-blur-[1px]">
+        <div className="absolute inset-0 flex items-center justify-center bg-card/60 backdrop-blur-[1px] z-20">
           <Loader2 className="animate-spin text-muted-foreground/60" size={20} />
         </div>
       )}
@@ -233,6 +245,7 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
   const { t } = useT();
   const viewportRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+  const isZooming = useRef(false);
 
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(pdf.last_preview_page || 1);
@@ -375,6 +388,7 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
 
     const observer = new IntersectionObserver(
       (entries) => {
+        if (isZooming.current) return;
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             const pageIdx = Number(entry.target.getAttribute('data-page-index'));
@@ -422,6 +436,26 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
       return () => clearTimeout(timer);
     }
   }, [pdfDoc, loading]);
+
+  const lastScale = useRef(scale);
+
+  useLayoutEffect(() => {
+    if (scale !== lastScale.current) {
+      const container = viewportRef.current;
+      if (container) {
+        const ratio = scale / lastScale.current;
+        const targetScroll = container.scrollTop * ratio;
+        container.scrollTo({ top: targetScroll, behavior: 'auto' });
+      }
+      lastScale.current = scale;
+      
+      // Keep isZooming locked for 150ms until browser layout and observer events settle
+      const timer = setTimeout(() => {
+        isZooming.current = false;
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [scale]);
 
   // Trigger external page jumps (e.g. from TTS conversion page range locate link)
   useEffect(() => {
@@ -476,11 +510,13 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
   };
 
   const zoomIn = () => {
+    isZooming.current = true;
     setIsAutoScaled(false);
     setScale((prev) => Math.min(prev + 0.25, 3.0));
   };
 
   const zoomOut = () => {
+    isZooming.current = true;
     setIsAutoScaled(false);
     setScale((prev) => Math.max(prev - 0.25, 0.5));
   };
@@ -510,6 +546,7 @@ export default function PdfReaderPane({ pdf, jumpPageTrigger }: PdfReaderPanePro
   };
 
   const resetFit = () => {
+    isZooming.current = true;
     setIsAutoScaled(true);
     setScale(1.0);
   };

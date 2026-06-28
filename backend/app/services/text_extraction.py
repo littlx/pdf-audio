@@ -244,20 +244,18 @@ async def extract_text_from_pdf_via_ai(
         temp_pdf_path = temp_pdf.name
         try:
             temp_pdf.close()
-            sub_doc = fitz.open()
-            for pn in pages:
-                sub_doc.insert_pdf(doc, from_page=pn - 1, to_page=pn - 1)
-            sub_doc.save(temp_pdf_path)
-            sub_doc.close()
+            with fitz.open() as sub_doc:
+                for pn in pages:
+                    sub_doc.insert_pdf(doc, from_page=pn - 1, to_page=pn - 1)
+                sub_doc.save(temp_pdf_path)
 
             # 2. Reopen the temp PDF and extract RAW text per page
             #    Use get_text("text") — plain extraction without block sorting or cleaning
-            sub_doc2 = fitz.open(temp_pdf_path)
-            page_texts: list[str] = []
-            for page_num, page in enumerate(sub_doc2):
-                raw = page.get_text("text")
-                page_texts.append(f"--- Page {pages[page_num]} ---\n{raw}")
-            sub_doc2.close()
+            with fitz.open(temp_pdf_path) as sub_doc2:
+                page_texts: list[str] = []
+                for page_num, page in enumerate(sub_doc2):
+                    raw = page.get_text("text")
+                    page_texts.append(f"--- Page {pages[page_num]} ---\n{raw}")
         finally:
             Path(temp_pdf_path).unlink(missing_ok=True)
 

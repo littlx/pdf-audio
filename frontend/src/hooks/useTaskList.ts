@@ -38,8 +38,9 @@ export function useTaskList(refreshKey = 0, active = true) {
     }
   }, [refreshKey, load]);
 
+  const hasActiveTasks = tasks.some(t => ['pending', 'running', 'canceling'].includes(t.status));
+
   useEffect(() => {
-    const hasActiveTasks = tasks.some(t => ['pending', 'running', 'canceling'].includes(t.status));
     if (!hasActiveTasks) return;
 
     const timer = setInterval(() => {
@@ -47,7 +48,7 @@ export function useTaskList(refreshKey = 0, active = true) {
     }, 4000);
 
     return () => clearInterval(timer);
-  }, [tasks, load]);
+  }, [hasActiveTasks, load]);
 
   return {
     tasks,
