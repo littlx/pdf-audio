@@ -74,7 +74,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
   const { toast } = useToast();
   const { activeAudio, setActiveAudio, isPlaying, togglePlay } = usePlayer();
 
-  const [pageExpression, setPageExpression] = useState('1');
+  const [pageExpression, setPageExpression] = useState('');
   const [format, setFormat] = useState<AppSettings['default_bilingual_format']>(defaultSettings.default_bilingual_format);
   const [style, setStyle] = useState<AppSettings['default_output_style']>(defaultSettings.default_output_style);
   const [audioMode, setAudioMode] = useState('bilingual');
@@ -907,43 +907,45 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
           </button>
 
           <div className={`convert-advanced-body ${showAdvanced ? 'is-open' : ''}`}>
-            <div className="convert-advanced-grid">
-              <div className="convert-advanced-field">
-                <label htmlFor="format-select">{t('format')}</label>
-                <select
-                  id="format-select"
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value as AppSettings['default_bilingual_format'])}
-                >
-                  <option value="sentence_pair">{t('sentencePair')}</option>
-                  <option value="paragraph_pair">{t('paragraphPair')}</option>
-                </select>
-              </div>
-              <div className="convert-advanced-field">
-                <label htmlFor="style-select">{t('style')}</label>
-                <select
-                  id="style-select"
-                  value={style}
-                  onChange={(e) => setStyle(e.target.value as AppSettings['default_output_style'])}
-                >
-                  <option value="faithful">{t('faithful')}</option>
-                  <option value="plain_explanation">{t('plainExplanation')}</option>
-                  <option value="child_friendly">{t('childFriendly')}</option>
-                  <option value="exam_english">{t('examEnglish')}</option>
-                  <option value="business_english">{t('businessEnglish')}</option>
-                </select>
-              </div>
-              <div className="convert-advanced-field">
-                <label htmlFor="audio-mode-select">{t('audioMode')}</label>
-                <select
-                  id="audio-mode-select"
-                  value={audioMode}
-                  onChange={(e) => setAudioMode(e.target.value)}
-                >
-                  <option value="bilingual">{t('bilingual')}</option>
-                  <option value="english">{t('englishOnly')}</option>
-                  <option value="chinese">{t('chineseOnly')}</option>
-                </select>
+            <div>
+              <div className="convert-advanced-grid">
+                <div className="convert-advanced-field">
+                  <label htmlFor="format-select">{t('format')}</label>
+                  <select
+                    id="format-select"
+                    value={format}
+                    onChange={(e) => setFormat(e.target.value as AppSettings['default_bilingual_format'])}
+                  >
+                    <option value="sentence_pair">{t('sentencePair')}</option>
+                    <option value="paragraph_pair">{t('paragraphPair')}</option>
+                  </select>
+                </div>
+                <div className="convert-advanced-field">
+                  <label htmlFor="style-select">{t('style')}</label>
+                  <select
+                    id="style-select"
+                    value={style}
+                    onChange={(e) => setStyle(e.target.value as AppSettings['default_output_style'])}
+                  >
+                    <option value="faithful">{t('faithful')}</option>
+                    <option value="plain_explanation">{t('plainExplanation')}</option>
+                    <option value="child_friendly">{t('childFriendly')}</option>
+                    <option value="exam_english">{t('examEnglish')}</option>
+                    <option value="business_english">{t('businessEnglish')}</option>
+                  </select>
+                </div>
+                <div className="convert-advanced-field">
+                  <label htmlFor="audio-mode-select">{t('audioMode')}</label>
+                  <select
+                    id="audio-mode-select"
+                    value={audioMode}
+                    onChange={(e) => setAudioMode(e.target.value)}
+                  >
+                    <option value="bilingual">{t('bilingual')}</option>
+                    <option value="english">{t('englishOnly')}</option>
+                    <option value="chinese">{t('chineseOnly')}</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
@@ -952,7 +954,7 @@ export default function ConvertPane({ pdf, initialText = '', onConversionComplet
         {/* Generate Button */}
         <Button
           onClick={createTask}
-          disabled={(mode === 'pages' && !pdf) || (mode === 'text' && textToConvert.trim().length < 20)}
+          disabled={(mode === 'pages' && (!pdf || !pageExpression.trim())) || (mode === 'text' && textToConvert.trim().length < 20)}
           className="convert-generate-btn"
         >
           {t('startGenerating')}

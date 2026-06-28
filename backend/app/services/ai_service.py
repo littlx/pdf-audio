@@ -32,7 +32,9 @@ Requirements:
 7. When helpful, include bilingual terminology in Chinese, such as Transformer（转换器）.
 8. Do not generate headings, summaries, introductions, or endings.
 9. Skip references, formulas, tables, footnotes, and irrelevant artifacts.
-10. Style: {STYLE_INSTRUCTIONS.get(output_style, STYLE_INSTRUCTIONS['faithful'])}
+10. Long-sentence splitting: Split extremely long or complex English sentences (e.g., containing multiple clauses or nested structures) into two or more natural, shorter sentences. Translate each of these shorter sentences correspondingly.
+11. Short-sentence merging: Merge adjacent very short sentences/phrases (e.g., 'Yes.', 'I agree.', 'Thank you.') into a single coherent item to avoid excessive fragmentation.
+12. Style: {STYLE_INSTRUCTIONS.get(output_style, STYLE_INSTRUCTIONS['faithful'])}
 
 JSON example:
 [
@@ -70,6 +72,8 @@ Requirements for the bilingual output:
 - When helpful, include bilingual terminology in Chinese, such as Transformer（转换器）.
 - Do not generate headings, summaries, introductions, or endings.
 - Skip references, formulas, tables, footnotes, and irrelevant artifacts.
+- Long-sentence splitting: Split extremely long or complex English sentences (e.g., containing multiple clauses or nested structures) into two or more natural, shorter sentences. Translate each of these shorter sentences correspondingly.
+- Short-sentence merging: Merge adjacent very short sentences/phrases (e.g., 'Yes.', 'I agree.', 'Thank you.') into a single coherent item to avoid excessive fragmentation.
 - Style: {STYLE_INSTRUCTIONS.get(output_style, STYLE_INSTRUCTIONS['faithful'])}
 
 JSON example:

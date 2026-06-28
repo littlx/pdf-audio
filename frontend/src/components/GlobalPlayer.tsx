@@ -95,9 +95,11 @@ export default function GlobalPlayer() {
   // Sync seek time from parent
   useEffect(() => {
     if (seekTime !== null && audioRef.current) {
-      audioRef.current.currentTime = seekTime;
-      audioRef.current.play().catch(() => undefined);
-      setSeekTime(null);
+      if (audioRef.current.readyState >= 1) {
+        audioRef.current.currentTime = seekTime;
+        audioRef.current.play().catch(() => undefined);
+        setSeekTime(null);
+      }
     }
   }, [seekTime]);
 
@@ -289,6 +291,11 @@ export default function GlobalPlayer() {
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
       setDuration(audioRef.current.duration);
+      if (seekTime !== null) {
+        audioRef.current.currentTime = seekTime;
+        audioRef.current.play().catch(() => undefined);
+        setSeekTime(null);
+      }
     }
   };
 
