@@ -61,6 +61,7 @@ def init_db() -> None:
                 "worker_id": "ALTER TABLE conversion_tasks ADD COLUMN worker_id VARCHAR",
                 "started_at": "ALTER TABLE conversion_tasks ADD COLUMN started_at DATETIME",
                 "heartbeat_at": "ALTER TABLE conversion_tasks ADD COLUMN heartbeat_at DATETIME",
+                "extract_mode": "ALTER TABLE conversion_tasks ADD COLUMN extract_mode VARCHAR DEFAULT 'auto'",
             }
             for col, sql in migrations.items():
                 if col not in cols:
